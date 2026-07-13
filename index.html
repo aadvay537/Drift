@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Drift — see what the algorithm has been doing to you</title>
+  <meta name="description" content="One click grabs your own watch history, and in two minutes Drift shows you what kind of algorithmic influence you've been under — and how it changed you." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🪞%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="#top"><span class="brand-mark">◍</span> Drift</a>
+    <nav class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#get">Get your report</a>
+      <a href="#privacy">Privacy</a>
+      <a class="gh" href="https://github.com" target="_blank" rel="noopener">Code on GitHub</a>
+    </nav>
+    <span id="modeBadge" class="mode-badge" title="Analysis engine status"></span>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <p class="eyebrow">A mirror, not a filter</p>
+      <h1>See what the algorithm has<br />been doing to you.</h1>
+      <p class="lede">
+        Recommendation feeds slowly change what you watch — too gradually to notice.
+        Grab your own history with one click and, in about two minutes, see the kind of
+        drift you've been under. Drift never blocks, ranks, or lectures. It just holds up a mirror.
+      </p>
+      <div class="hero-cta">
+        <a href="#get" class="btn btn-primary">Get my report</a>
+        <button id="heroSample" class="btn btn-ghost">Try with sample data →</button>
+      </div>
+      <p class="hero-sub">No account. Your file never leaves your browser. <a href="#privacy">Here's exactly what happens to it.</a></p>
+    </section>
+
+    <!-- THREE THINGS -->
+    <section class="threes">
+      <article><span class="num">01</span><h3>Your drift type</h3><p>Did your content narrow to fewer topics, get more emotionally intense, or shift to shorter, faster videos?</p></article>
+      <article><span class="num">02</span><h3>What changed with it</h3><p>Late-night watching, binge sessions, shorter attention per video — compared only to your own earlier weeks.</p></article>
+      <article><span class="num">03</span><h3>One thing to try</h3><p>A single, optional suggestion. Never a lecture, never a score, never guilt.</p></article>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how" class="how">
+      <h2>How it works</h2>
+      <p class="section-lede">Five steps. The parts that touch your data stay in your browser; only cleaned-up titles ever reach an AI.</p>
+      <ol class="pipeline">
+        <li><span class="step-k">In your browser</span><h4>Your file stays local</h4><p>The bookmarklet's file is parsed on this page. It is never uploaded to our server.</p></li>
+        <li><span class="step-k">In your browser</span><h4>We clean it</h4><p>Channel names and handles are stripped or replaced with codes before anything leaves your device.</p></li>
+        <li><span class="step-k">AI, titles only</span><h4>An AI labels each item</h4><p>Only cleaned titles go out. The AI tags each one's topic and how emotionally charged it is, then the titles are deleted.</p></li>
+        <li><span class="step-k">Plain math, in browser</span><h4>Fixed rules decide your drift type</h4><p>Not the AI. Published thresholds you can audit — so the same data always gives the same answer.</p></li>
+        <li><span class="step-k">AI, then a second AI</span><h4>Your report is written and tone-checked</h4><p>No scare words, no "this caused that", no comparing you to others. If the tone check fails twice, you get a plain pre-written version.</p></li>
+      </ol>
+      <p class="why-split">Why split it this way? The AI is good at <em>reading</em> content but shouldn't <em>judge</em> you. The judgment comes from fixed, published rules — auditable by anyone.</p>
+    </section>
+
+    <!-- GET YOUR REPORT -->
+    <section id="get" class="get">
+      <h2>Get your report</h2>
+      <div class="get-grid">
+        <!-- Step 1: install bookmarklet -->
+        <div class="card">
+          <div class="card-step">1</div>
+          <h3>Drag this to your bookmarks bar</h3>
+          <p>A bookmarklet is a bookmark that runs a tiny script instead of opening a page. One drag to set up, one click to use.</p>
+          <a id="bookmarklet" class="grab-btn" href="#" draggable="true" title="Drag me to your bookmarks bar">◍ Grab my history</a>
+          <details class="mobile-help">
+            <summary>On mobile, or dragging won't work?</summary>
+            <p>Add a new bookmark, then edit its address and paste the script below in. Then open your history page and pick that bookmark.</p>
+            <button id="copyBm" class="btn btn-ghost btn-sm">Copy bookmarklet script</button>
+          </details>
+          <details class="source-peek">
+            <summary>Read the full script (≈50 lines)</summary>
+            <pre id="bmSource" class="code">loading…</pre>
+          </details>
+        </div>
+
+        <!-- Step 2: grab on your history page -->
+        <div class="card">
+          <div class="card-step">2</div>
+          <h3>Open your history &amp; grab it</h3>
+          <p>Go to <code>youtube.com/feed/history</code> (or your Reddit profile), scroll down for a minute so older items load — a month of depth is plenty — then click <strong>Grab my history</strong>. It saves one small file.</p>
+          <p class="hint">Nothing else is read: not your password, not other tabs, only the page you clicked it on.</p>
+        </div>
+
+        <!-- Step 3: drop the file -->
+        <div class="card">
+          <div class="card-step">3</div>
+          <h3>Drop the file in</h3>
+          <div id="drop" class="dropzone" tabindex="0" role="button" aria-label="Drop your history file or click to choose">
+            <div class="drop-inner">
+              <div class="drop-icon">⬇</div>
+              <p><strong>Drop your <code>drift-history…json</code> here</strong></p>
+              <p class="drop-or">or <button id="chooseFile" class="linklike">choose a file</button></p>
+            </div>
+            <input id="fileInput" type="file" accept="application/json,.json" hidden />
+          </div>
+          <button id="sampleBtn" class="btn btn-ghost btn-block">Or try with sample data →</button>
+        </div>
+      </div>
+
+      <!-- Paste-in fallback (PRD §3, §11.1) -->
+      <details class="paste-fallback">
+        <summary>Bookmarklet won't work? Paste your history instead</summary>
+        <div class="paste-body">
+          <p>On your history page, select the list (Ctrl/Cmd+A), copy it, and paste it below. This is
+          messier and <strong>loses video durations</strong> — so we can spot <em>Narrowing</em> and
+          <em>Escalation</em>, but not <em>Engagement drift</em> — and confidence is lower. The bookmarklet is better when it works.</p>
+          <textarea id="pasteArea" rows="7" placeholder="Paste the copied text from youtube.com/feed/history (or your Reddit history) here…"></textarea>
+          <div class="paste-actions">
+            <label class="paste-source">Source:
+              <select id="pasteSource"><option value="youtube">YouTube</option><option value="reddit">Reddit</option></select>
+            </label>
+            <button id="pasteBtn" class="btn btn-ghost">Analyse pasted text</button>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- ANALYSIS / REPORT -->
+    <section id="report" class="report hidden" aria-live="polite"></section>
+
+    <!-- PRIVACY -->
+    <section id="privacy" class="privacy">
+      <h2>Privacy, in one paragraph</h2>
+      <p>
+        The bookmarklet runs only on the page you click it on and saves its file straight to your
+        device — it talks to no server. That file never leaves your browser. Only cleaned-up video
+        titles reach the AI service, which deletes them immediately and never trains on them. Your
+        habit patterns — when and how long you watch — are computed entirely in your browser and are
+        never sent. Before anything is sent, <strong>you see exactly what will be sent.</strong> All
+        code, including the bookmarklet's full script above, is public.
+      </p>
+      <ul class="never">
+        <li>Never blocks, filters, or recommends content</li>
+        <li>Never claims the algorithm <em>caused</em> your habits — patterns, not proof</li>
+        <li>Never sends your raw file, your name, or your habit data anywhere</li>
+        <li>Never reports to anyone unless you choose to share a summary</li>
+        <li>No scores, no streaks, no guilt</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Drift · Draft v3.1 · A media-literacy mirror. Built from the Drift PRD.</p>
+  </footer>
+
+  <!-- "What we send" preview modal -->
+  <div id="sendModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sendTitle">
+    <div class="modal-card">
+      <h3 id="sendTitle">This is exactly what will be sent</h3>
+      <p class="modal-lede">Your raw file, channels, handles, and every timestamp stay in your browser. Only these cleaned titles go to the AI to be labelled, then deleted.</p>
+      <div id="sendStats" class="send-stats"></div>
+      <pre id="sendPreview" class="code send-preview"></pre>
+      <div class="modal-actions">
+        <button id="sendCancel" class="btn btn-ghost">Cancel — keep it local</button>
+        <button id="sendConfirm" class="btn btn-primary">Looks good — analyse</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
