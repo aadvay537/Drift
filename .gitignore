@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.log
+drift-history-*.json
+
+# stray media
+*.jpeg
+*.jpg
+*.png
