@@ -164,6 +164,26 @@
     </div>
   </div>
 
+  <!-- Always-on assistant: available anywhere, before or after an analysis -->
+  <button id="chatFab" class="chat-fab" aria-label="Ask the Drift assistant" aria-expanded="false">
+    <span class="chat-fab-icon">◍</span><span class="chat-fab-label">Ask Drift</span>
+  </button>
+  <section id="chatWidget" class="chat-widget hidden" role="dialog" aria-label="Drift assistant">
+    <header class="cw-head">
+      <div class="cw-title"><span class="cw-dot"></span> Drift assistant</div>
+      <button id="chatClose" class="cw-close" aria-label="Close chat">✕</button>
+    </header>
+    <div class="cw-intro" id="cwIntro">
+      <p>Hi — I'm the Drift assistant. Ask me how Drift works, what the drift types mean, or what happens to your data. Once you've run an analysis, I can talk about your own result too.</p>
+    </div>
+    <div class="cw-log" id="cwLog" aria-live="polite"></div>
+    <div class="cw-suggest" id="cwSuggest"></div>
+    <form class="cw-form" id="cwForm" autocomplete="off">
+      <input id="cwInput" type="text" placeholder="Ask a question…" aria-label="Ask the Drift assistant" maxlength="500" />
+      <button class="btn btn-primary btn-sm" type="submit">Ask</button>
+    </form>
+  </section>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -75,25 +75,30 @@ app.post('/api/report', async (req, res) => {
   }
 });
 
-// 3. Chat. Same privacy envelope: only the drift summary + the already-written
+// 3. Chat. The always-on assistant. drift + report are OPTIONAL — before an
+// analysis it answers general questions; after one it also gets that reader's
+// summary. Same privacy envelope: only the drift summary + the already-written
 // report + the reader's own questions. No raw titles or habit data are accepted.
 app.post('/api/chat', async (req, res) => {
   try {
     const b = req.body || {};
-    const d = b.drift;
-    if (!d || typeof d.type !== 'string') {
-      return res.status(400).json({ error: 'missing drift result' });
-    }
     const question = typeof b.question === 'string' ? b.question.slice(0, 500) : '';
     if (!question.trim()) return res.status(400).json({ error: 'empty question' });
 
-    const r = b.report || {};
-    const report = {
-      headline: String(r.headline || '').slice(0, 400),
-      driving: String(r.driving || '').slice(0, 400),
-      changed: String(r.changed || '').slice(0, 600),
-      tryThis: String(r.tryThis || '').slice(0, 400),
-    };
+    const d = b.drift;
+    const drift = d && typeof d.type === 'string' ? shapeDrift(d) : null;
+
+    const r = b.report;
+    // A report only counts if there's a drift result to anchor it to.
+    const report = drift && r && typeof r === 'object'
+      ? {
+          headline: String(r.headline || '').slice(0, 400),
+          driving: String(r.driving || '').slice(0, 400),
+          changed: String(r.changed || '').slice(0, 600),
+          tryThis: String(r.tryThis || '').slice(0, 400),
+        }
+      : null;
+
     const history = Array.isArray(b.history)
       ? b.history
           .filter((m) => m && typeof m.content === 'string')
@@ -101,7 +106,7 @@ app.post('/api/chat', async (req, res) => {
           .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 1000) }))
       : [];
 
-    const result = await chatAboutDrift({ drift: shapeDrift(d), report, history, question });
+    const result = await chatAboutDrift({ drift, report, history, question });
     res.json({ ...result, mode: agentMode });
   } catch (err) {
     console.error('[/api/chat]', err);

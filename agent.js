@@ -127,44 +127,63 @@ export function mockLabel(it) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. CHAT  — let the reader ask questions about their OWN drift result.
+// 4. CHAT  — an always-on assistant that answers the reader's questions.
 //
-// Grounded strictly in the small drift summary + the written report that were
-// already computed for them — nothing new about the reader is sent. Same calm,
+// Works with OR without a report: before an analysis it answers general
+// questions about how Drift works, privacy, the drift types, the bookmarklet,
+// etc.; after one it can also ground answers in that reader's own result.
+// It only ever receives the (already-shared) drift summary + report + the
+// reader's own questions — nothing new about the reader is sent. Same calm,
 // non-judgmental tone rules as the report writer, enforced with the same BANNED
 // list. No key (or any failure) → a deterministic, still-helpful mock answer.
 // ---------------------------------------------------------------------------
 
+// Published, auditable facts the assistant may rely on — so it clears real
+// doubts instead of guessing. Kept in sync with the site copy and drift.js.
+const DRIFT_KB = [
+  'ABOUT DRIFT — use these facts and never contradict them:',
+  '- Drift is a media-literacy tool, "a mirror, not a filter". You grab your own YouTube or Reddit history with one click and, in about two minutes, see what kind of algorithmic influence your feed has been under. It never blocks, ranks, filters, lectures, or gives scores/streaks.',
+  '- The pipeline has 5 steps: (1) your history file is parsed IN YOUR BROWSER and never uploaded; (2) it is cleaned locally — channel names and @handles are stripped; (3) only the cleaned TITLES are sent to an AI labeller that tags each one\'s topic and how emotionally charged it is (0-1), then the titles are deleted; (4) fixed, published MATH in your browser decides your drift type — not the AI; (5) an AI writes a short report and a SECOND AI tone-checks it (if that fails twice you get a plain pre-written version).',
+  '- Three drift types, with published thresholds, comparing the LATER half of your timeline to your OWN earlier half: NARROWING = your distinct topics shrink more than 15%; ESCALATION = your average emotional intensity rises more than 10%; ENGAGEMENT DRIFT = your videos get more than 20% shorter AND your watch sessions get more than 25% more frequent. If none clear their line → "mixed / unclear". If there is not enough history → "insufficient" (it refuses to guess).',
+  '- It compares you only to your OWN earlier weeks, never to other people. The same file always gives the same answer (rules v3.1 — anyone can read exactly how it decides).',
+  '- Privacy: your raw file, channel names, handles, and every timestamp stay in your browser. Only cleaned titles and a tiny, non-identifying drift summary are ever sent; the AI service deletes them and never trains on them. Your habit patterns (when and how long you watch) are computed entirely on your device. Before anything is sent, you see exactly what will be sent.',
+  '- The bookmarklet is a bookmark that runs a tiny script: drag it to your bookmarks bar once, open your history page and scroll back a few weeks, then click it — it saves one small file you drop back on the site. It talks to no server and only reads the page you click it on. On mobile you can paste the script into a bookmark, or use the paste-in fallback (which loses video durations, so engagement drift can\'t be detected that way).',
+  '- Modes: with an API key Drift uses Claude live; without one it runs a deterministic "demo engine" so everything still works end to end. A badge at the top-right shows which mode is active.',
+].join('\n');
+
 const CHAT_SYSTEM =
-  "You are Drift's assistant. The reader has just been shown a media-literacy \"drift\" report — a calm " +
-  'mirror of how their own recommendation feed shifted over time, compared ONLY to their own earlier weeks. ' +
-  'Answer their questions about this report, and about how recommendation feeds and media literacy work in general. ' +
-  'Tone rules you MUST obey (a mirror, not a filter): no scare words; never claim the algorithm CAUSED their ' +
-  'behaviour (show patterns, not proof); never compare them to other people; never diagnose; no guilt, scores, or ' +
-  'streaks; never ask how they feel emotionally. Be warm, plain and brief — at most one short paragraph (2-4 ' +
-  'sentences). Ground every claim about THEIR data in the drift facts you are given, and never invent numbers that ' +
-  "aren't there. If they ask something the data can't answer (why it happened, what happens next, who they are), say " +
-  'plainly that Drift only shows patterns in what they already watched — it cannot know the cause or the future. ' +
-  'If a question is unrelated to their drift or to media literacy, answer briefly and gently steer back.';
+  "You are Drift's assistant — a calm, friendly guide for a media-literacy tool. Help the reader understand Drift " +
+  'and (if they have run one) their own result, and answer general questions about how recommendation feeds and media ' +
+  'literacy work. Actually resolve the doubt: be specific and use the facts below; if they ask "how", walk through the ' +
+  'relevant step plainly. Tone rules you MUST obey (a mirror, not a filter): no scare words; never claim the algorithm ' +
+  'CAUSED anyone\'s behaviour (patterns, not proof); never compare the reader to other people; never diagnose; no guilt, ' +
+  'scores, or streaks; never ask how they feel emotionally. Keep answers warm, plain, and fairly short — usually 2-5 ' +
+  'sentences, a little more only when the question truly needs it. Never invent numbers. If a report is provided, ground ' +
+  "any claim about THEIR data in it; if something isn't in the data (why it happened, what happens next, who they are), " +
+  'say plainly that Drift only shows patterns in what they already watched. If a question is unrelated to Drift or media ' +
+  'literacy, answer briefly and gently steer back.\n\n' + DRIFT_KB;
 
 /**
- * Answer one question about the reader's drift result.
+ * Answer one question. Both drift and report are OPTIONAL — when absent the
+ * assistant answers generally (the reader hasn't analysed anything yet).
  * @param {object} p
- * @param {object} p.drift    the (already-shared) drift summary
- * @param {object} p.report   the written report {headline,driving,changed,tryThis}
+ * @param {object|null} p.drift    the (already-shared) drift summary, or null
+ * @param {object|null} p.report   the written report {headline,driving,changed,tryThis}, or null
  * @param {{role:string,content:string}[]} p.history  prior completed turns (user/assistant pairs)
  * @param {string} p.question the new question
  * @returns {Promise<{answer:string, source:string}>}
  */
 export async function chatAboutDrift({ drift, report, history = [], question }) {
   const q = String(question || '').trim();
-  if (!q) return { answer: 'Ask me anything about your drift report.', source: hasKey ? 'live' : 'mock' };
+  if (!q) return { answer: 'Ask me anything about Drift or your report.', source: hasKey ? 'live' : 'mock' };
   if (!hasKey) return { answer: mockChat(drift, report, q), source: 'mock' };
 
   try {
-    const context =
-      'The reader\'s report — the ONLY data you may reference:\n' +
-      JSON.stringify({ drift: driftFacts(drift), report }, null, 0);
+    const context = drift && report
+      ? "\n\nTHE READER'S CURRENT REPORT (ground any claim about their data in this, and nothing else):\n" +
+        JSON.stringify({ drift: driftFacts(drift), report }, null, 0)
+      : '\n\nThe reader has NOT run an analysis yet, so you have no report for them — answer generally, and where it helps, ' +
+        'invite them to try it (the "Try with sample data" button shows a full example in seconds).';
     const messages = [
       ...history
         .filter((m) => m && typeof m.content === 'string' && m.content.trim())
@@ -174,8 +193,8 @@ export async function chatAboutDrift({ drift, report, history = [], question }) 
     ];
     const msg = await client.messages.create({
       model: MODEL,
-      max_tokens: 700, // headroom for a thinking block + a short answer
-      system: CHAT_SYSTEM + '\n\n' + context,
+      max_tokens: 900, // headroom for a thinking block + a few-sentence answer
+      system: CHAT_SYSTEM + context,
       messages,
     });
     const text = msg.content.map((c) => (c.type === 'text' ? c.text : '')).join('').trim();
@@ -192,30 +211,57 @@ export async function chatAboutDrift({ drift, report, history = [], question }) 
 }
 
 // Deterministic assistant — used with no API key and as the live fallback.
+// Answers general questions about Drift, then report-specific ones if a report
+// exists. Matched with word-ish regexes so common substrings don't misfire.
 function mockChat(drift, report, q) {
   const ql = q.toLowerCase();
-  const typeName = {
-    escalation: 'emotional escalation', narrowing: 'narrowing',
-    engagement: 'engagement drift', mixed: 'a mixed, unclear signal',
-    insufficient: 'not enough history to call a type yet',
-  }[drift?.type] || 'your result';
 
-  if (/priv|data|sent|safe|secure|leak/.test(ql)) {
-    return 'Only cleaned-up titles and this small drift summary ever left your browser — no channels, handles, timestamps, or habit data. Everything about when and how long you watched was worked out on your own device.';
+  // ---- General questions (answerable with or without a report) ----
+  if (/priv|\bdata\b|\bsent\b|\bsend\b|safe|secure|leak|track|stored?|upload/.test(ql)) {
+    return 'Your raw history file, channel names, handles, and every timestamp stay in your browser — they are never uploaded. Only cleaned-up titles and a tiny drift summary reach the AI, which deletes them and never trains on them. Everything about when and how long you watch is worked out on your own device, and you see exactly what will be sent before it goes.';
   }
-  if (/why|cause|because|reason/.test(ql)) {
-    return `Drift can only show the pattern in what you already watched — it can't know why it happened or prove the feed caused it. What it can point to is this: ${report.driving}`;
+  // Bookmarklet / getting-started is checked BEFORE the generic "how it works"
+  // so "what is the bookmarklet and how do I use it?" lands here.
+  if (/bookmarklet|grab my history|get started|getting started|how (do i|to|can i) (get|grab|start|use)|get my report|install/.test(ql)) {
+    return 'The bookmarklet is just a bookmark that runs a tiny script. Drag it to your bookmarks bar once, open your YouTube history page and scroll back a few weeks so older items load, then click it — it saves one small file you drop back here. It talks to no server and only reads the page you click it on. On a phone you can copy the script into a bookmark instead, or use the paste-in fallback.';
   }
-  if (/(what|which).*(do|should|try|change|next|now)/.test(ql)) {
-    return `Nothing here needs fixing — it's a mirror, not a verdict. If you're curious, one low-pressure idea: ${report.tryThis}`;
+  if (/how (does|do|is|are|it)|how it works|pipeline|\bsteps?\b|what is drift|what'?s drift|what does (it|drift) do/.test(ql)) {
+    return 'Drift reads your own watch history in five steps: your file is parsed in your browser (never uploaded), cleaned so channels and handles are stripped, then only the titles go to an AI that tags each one\'s topic and emotional intensity. Fixed, published math in your browser then decides your "drift type", and finally one AI writes a short report while a second one tone-checks it. The AI reads and writes — it never judges you; the judgment comes from plain, auditable rules.';
   }
-  if (/confiden|accur|sure|trust|reliab|wrong/.test(ql)) {
-    return `This is a ${drift?.confidence || 'low'}-confidence read, based on about ${drift?.coverageDays || 0} days of history. More history would sharpen it — Drift only compares you to your own earlier weeks, never to anyone else.`;
+  if (!report && /\btypes?\b|narrowing|escalation|engagement|\bmixed\b|insufficient|categor|kind of drift|what can it find|what does it (look|check) for/.test(ql)) {
+    return 'Drift looks for three patterns by comparing your recent weeks to your own earlier weeks: NARROWING (your range of topics shrinks by more than 15%), ESCALATION (your average emotional intensity rises more than 10%), and ENGAGEMENT DRIFT (your videos get over 20% shorter AND you open over 25% more watch sessions). If nothing crosses the line it says "mixed", and if there isn\'t enough history it honestly says so instead of guessing.';
   }
-  if (/(what|which).*(type|kind|drift|mean|result)|explain|meaning/.test(ql)) {
-    return `Your report came out as ${typeName}. ${report.headline} In plain terms, Drift lines your recent weeks up against your own earlier weeks and names the pattern it sees — it doesn't rank you or claim the feed caused it.`;
+  if (!report && /accur|confiden|trust|reliab|\bwrong\b|\bsure\b|is it real|legit|biased?/.test(ql)) {
+    return 'Drift is honest by design: it uses fixed, published thresholds, compares you only to your own earlier weeks, and refuses to classify when there isn\'t enough history. It shows patterns, not proof — a mirror to reflect on, not a verdict. The more history you grab (about a month is plenty), the clearer the read.';
   }
-  return `Here's what your report shows: ${report.driving} ${report.changed} You can ask me what the drift type means, why it might have shown up, whether it's reliable, or what happened to your data.`;
+  if (/\bdemo\b|\bmock\b|\blive\b|api key|\bclaude\b|which model|ai model/.test(ql)) {
+    return 'When an API key is set, Drift uses Claude live to label your titles and write your report. Without one it runs a built-in "demo engine" that does everything deterministically, so the site works end to end either way. The badge at the top-right tells you which mode you\'re in.';
+  }
+
+  // ---- Report-specific questions (only once they've analysed something) ----
+  if (report) {
+    const typeName = {
+      escalation: 'emotional escalation', narrowing: 'narrowing',
+      engagement: 'engagement drift', mixed: 'a mixed, unclear signal',
+      insufficient: 'not enough history to call a type yet',
+    }[drift?.type] || 'your result';
+    if (/\bwhy\b|cause|because|reason/.test(ql)) {
+      return `Drift can only show the pattern in what you already watched — it can't know why it happened or prove the feed caused it. What it can point to is this: ${report.driving}`;
+    }
+    if (/\btry\b|should i|change|suggest|advice|\bfix\b|what.*\bdo\b|what.*\bnext\b/.test(ql)) {
+      return `Nothing here needs fixing — it's a mirror, not a verdict. If you're curious, one low-pressure idea: ${report.tryThis}`;
+    }
+    if (/confiden|accur|\bsure\b|trust|reliab|\bwrong\b/.test(ql)) {
+      return `This is a ${drift?.confidence || 'low'}-confidence read, based on about ${drift?.coverageDays || 0} days of history. More history would sharpen it — Drift only compares you to your own earlier weeks, never to anyone else.`;
+    }
+    if (/mean|\btype\b|\bkind\b|result|explain|meaning|what is this/.test(ql)) {
+      return `Your report came out as ${typeName}. ${report.headline} In plain terms, Drift lines your recent weeks up against your own earlier weeks and names the pattern it sees — it doesn't rank you or claim the feed caused it.`;
+    }
+    return `Here's what your report shows: ${report.driving} ${report.changed} You can ask me what the drift type means, why it might have shown up, whether it's reliable, or what happened to your data.`;
+  }
+
+  // ---- General fallback (no report yet) ----
+  return 'I\'m the Drift assistant — ask me how Drift works, what the drift types mean, what happens to your data, or how to grab your history. Or hit "Try with sample data" to see a full report in seconds, and I can walk you through it.';
 }
 
 // ---------------------------------------------------------------------------
