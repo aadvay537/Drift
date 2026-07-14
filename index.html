@@ -67,15 +67,21 @@
         <div class="card">
           <div class="card-step">1</div>
           <h3>Drag this to your bookmarks bar</h3>
-          <p>A bookmarklet is a bookmark that runs a tiny script instead of opening a page. One drag to set up, one click to use.</p>
+          <p>A bookmarklet is a bookmark that runs a tiny script instead of opening a page. One drag to set up, one click to use — on a laptop or desktop.</p>
           <a id="bookmarklet" class="grab-btn" href="#" draggable="true" title="Drag me to your bookmarks bar">◍ Grab my history</a>
+          <ol class="howto">
+            <li>Show your bookmarks bar if it's hidden — press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> (Windows/Linux) or <kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> (Mac).</li>
+            <li><strong>Drag</strong> the button above up onto that bar. Don't click it here — a click just shows a reminder.</li>
+            <li>You'll now see a <strong>◍ Grab my history</strong> bookmark. That's it installed.</li>
+          </ol>
+          <p class="hint">Already installed it before? If you updated recently, drag it up again to <strong>replace</strong> the old one — a saved bookmark keeps the old script until you do.</p>
           <details class="mobile-help">
             <summary>On mobile, or dragging won't work?</summary>
-            <p>Add a new bookmark, then edit its address and paste the script below in. Then open your history page and pick that bookmark.</p>
+            <p>Dragging needs a desktop browser. On mobile, add any page as a bookmark, then edit that bookmark, delete its address, and paste the script below in its place. Then open your history page and open that bookmark. If that's fiddly, the <strong>paste-in fallback</strong> below is the easy route on phones.</p>
             <button id="copyBm" class="btn btn-ghost btn-sm">Copy bookmarklet script</button>
           </details>
           <details class="source-peek">
-            <summary>Read the full script (≈50 lines)</summary>
+            <summary>Read the full script (≈70 lines)</summary>
             <pre id="bmSource" class="code">loading…</pre>
           </details>
         </div>
@@ -84,8 +90,14 @@
         <div class="card">
           <div class="card-step">2</div>
           <h3>Open your history &amp; grab it</h3>
-          <p>Go to <code>youtube.com/feed/history</code> (or your Reddit profile) and click <strong>Grab my history</strong>. It scrolls the page for you to load your older history — you'll see a little counter while it works — then saves one small file. Takes about a minute.</p>
-          <p class="hint">Nothing else is read: not your password, not other tabs, only the page you clicked it on.</p>
+          <ol class="howto">
+            <li>Open <a href="https://www.youtube.com/feed/history" target="_blank" rel="noopener"><code>youtube.com/feed/history</code></a> (or your Reddit profile history) and make sure you're signed in.</li>
+            <li>Wait a second for the first videos to appear, then click the <strong>◍ Grab my history</strong> bookmark you just made.</li>
+            <li>A small counter appears at the top and the page <strong>scrolls itself</strong>, loading your older history. <strong>Leave it alone</strong> — don't scroll, click, or switch tabs while the counter is climbing.</li>
+            <li>When it finishes it saves one small file to your <strong>Downloads</strong> and shows how many items it grabbed. Now go to Step 3.</li>
+          </ol>
+          <p class="hint">A big history (hundreds of videos) can take a few minutes — that's normal; let the counter keep climbing. It only reads this one page: not your password, not other tabs.</p>
+          <p class="hint">Grabbed far fewer than you expected? YouTube itself stops loading history past a certain point — the bookmarklet gets everything YouTube is willing to show. Scrolling down yourself first, until videos stop loading, lets it capture the most.</p>
         </div>
 
         <!-- Step 3: drop the file -->

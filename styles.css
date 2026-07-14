@@ -103,6 +103,14 @@ section { max-width: var(--maxw); margin: 0 auto; padding: 5rem 1.5rem; }
 .card p { color: var(--muted); font-size: .93rem; }
 .hint { color: var(--faint); font-size: .85rem; }
 
+/* step-by-step how-to lists inside the "Get your report" cards */
+.howto { margin: .8rem 0 .4rem; padding-left: 1.2rem; display: grid; gap: .5rem; }
+.howto li { color: var(--muted); font-size: .9rem; line-height: 1.5; }
+.howto li::marker { color: var(--accent); font-weight: 700; }
+.howto strong { color: var(--text); }
+kbd { display: inline-block; padding: .05rem .4rem; margin: 0 .05rem; border-radius: 5px; background: var(--card-2);
+  border: 1px solid var(--line); box-shadow: 0 1px 0 var(--line); font: 600 .8em ui-monospace, Menlo, Consolas, monospace; }
+
 /* grab button (the bookmarklet) */
 .grab-btn { display: inline-block; margin: .6rem 0; padding: .7rem 1.2rem; border-radius: 10px; cursor: grab;
   background: linear-gradient(135deg, var(--warm), var(--hot)); color: #2a0f0f; font-weight: 700;
