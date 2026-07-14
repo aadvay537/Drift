@@ -4,6 +4,8 @@ import { computeDrift, RULES_VERSION, THRESHOLDS } from './drift.js';
 
 const $ = (s) => document.querySelector(s);
 let pending = null; // { source, items, cleaned } waiting on the send-preview confirm
+let lastAnalysis = null; // { drift, report, source } — what the chat panel talks about
+let chatHistory = [];    // completed [user, assistant] turns for the current report
 
 // ---------------------------------------------------------------------------
 // 0. Status badge + bookmarklet wiring
@@ -220,6 +222,8 @@ function step(msg) { const s = $('#stepText'); if (s) s.textContent = msg; }
 
 function renderReport(drift, report, source) {
   const el = $('#report');
+  lastAnalysis = { drift, report, source };
+  chatHistory = [];
   const type = TYPE_LABEL[drift.type] || 'Result';
   const confClass = drift.confidence === 'high' ? 'conf-high' : drift.confidence === 'medium' ? 'conf-medium' : '';
   const isReal = drift.type !== 'insufficient';
@@ -247,6 +251,21 @@ function renderReport(drift, report, source) {
       <div class="block"><div class="k">What changed with it</div><p>${escapeHtml(report.changed)}</p></div>
       ${signalChips ? `<div class="signals">${signalChips}</div>` : ''}
       <div class="block try"><div class="k">One thing to try</div><p>${escapeHtml(report.tryThis)}</p></div>
+      <div class="chat" id="chat">
+        <div class="k chat-k">Ask about your drift</div>
+        <p class="chat-hint">Curious what this means, why it might have shown up, or whether to trust it? Ask the AI — it only sees this report, nothing else about you.</p>
+        <div class="chat-log" id="chatLog"></div>
+        <div class="chat-suggest" id="chatSuggest">
+          <button class="chip chip-btn" type="button">What does this mean?</button>
+          <button class="chip chip-btn" type="button">Why might this have happened?</button>
+          <button class="chip chip-btn" type="button">Is this reliable?</button>
+          <button class="chip chip-btn" type="button">What could I try?</button>
+        </div>
+        <form class="chat-form" id="chatForm" autocomplete="off">
+          <input id="chatInput" type="text" placeholder="Ask a question about your report…" aria-label="Ask about your drift" maxlength="500" />
+          <button class="btn btn-primary btn-sm" type="submit">Ask</button>
+        </form>
+      </div>
       <div class="report-foot">
         <button class="btn btn-ghost" onclick="location.reload()">Run another analysis</button>
         <span class="badge">${report.toneChecked ? 'tone-checked ✓' : ''}</span>
@@ -254,7 +273,56 @@ function renderReport(drift, report, source) {
       </div>
       <p class="report-note">Drift shows patterns, not proof — it never claims the algorithm <em>caused</em> anything, and compares you only to your own earlier weeks. Rules v${RULES_VERSION} · thresholds: narrowing &gt;${pctT(THRESHOLDS.narrowing)}, escalation &gt;${pctT(THRESHOLDS.escalation)}, engagement &gt;${pctT(THRESHOLDS.engagementShorter)} shorter &amp; &gt;${pctT(THRESHOLDS.engagementMoreOften)} more often.</p>
     </div>`;
+  wireChat();
   el.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ---------------------------------------------------------------------------
+// 4b. Chat — ask the AI about your own report. Sends only the drift summary +
+// the written report (both already computed) + your questions. No new data.
+// ---------------------------------------------------------------------------
+function wireChat() {
+  const form = $('#chatForm');
+  if (!form) return;
+  form.addEventListener('submit', (e) => { e.preventDefault(); sendChat($('#chatInput').value); });
+  document.querySelectorAll('#chatSuggest .chip-btn').forEach((b) =>
+    b.addEventListener('click', () => sendChat(b.textContent)));
+}
+
+async function sendChat(question) {
+  const q = String(question || '').trim();
+  if (!q || !lastAnalysis) return;
+  const input = $('#chatInput');
+  if (input) { input.value = ''; input.focus(); }
+  appendChatMsg('user', q);
+  const typing = appendChatMsg('assistant', 'Thinking…', true);
+  try {
+    const res = await postJSON('/api/chat', {
+      drift: lastAnalysis.drift,
+      report: lastAnalysis.report,
+      history: chatHistory.slice(-8),
+      question: q,
+    });
+    const answer = (res.answer || '').trim() || "I couldn't answer that one — try rephrasing?";
+    typing.remove();
+    appendChatMsg('assistant', answer);
+    chatHistory.push({ role: 'user', content: q }, { role: 'assistant', content: answer });
+  } catch (err) {
+    console.error(err);
+    typing.remove();
+    appendChatMsg('assistant', 'Something went wrong reaching the assistant — your data never left your browser. Try again in a moment.');
+  }
+}
+
+function appendChatMsg(role, text, temp) {
+  const log = $('#chatLog');
+  if (!log) return { remove() {} };
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + role + (temp ? ' typing' : '');
+  div.textContent = text; // textContent — no HTML injection from AI or user text
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
 }
 
 function showError(msg) {
