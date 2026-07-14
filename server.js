@@ -11,7 +11,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { labelItems, writeReport, agentMode } from './agent.js';
+import { labelItems, writeReport, chatAboutDrift, agentMode } from './agent.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -42,6 +42,24 @@ app.post('/api/label', async (req, res) => {
   }
 });
 
+// Shape an incoming drift result into the small, non-identifying summary we allow.
+// Shared by /api/report and /api/chat so both accept exactly the same fields.
+function shapeDrift(d) {
+  return {
+    type: d.type,
+    metric: String(d.metric || ''),
+    percent: Number(d.percent) || 0,
+    startDate: typeof d.startDate === 'string' ? d.startDate.slice(0, 40) : '',
+    weeks: Number(d.weeks) || 0,
+    coverageDays: Number(d.coverageDays) || 0,
+    confidence: String(d.confidence || 'low'),
+    topClusters: Array.isArray(d.topClusters) ? d.topClusters.slice(0, 3).map(String) : [],
+    habitChanges: Array.isArray(d.habitChanges)
+      ? d.habitChanges.slice(0, 3).map((s) => String(s).slice(0, 200))
+      : [],
+  };
+}
+
 // 2. Report. Guard: we accept only the small, non-identifying drift summary.
 app.post('/api/report', async (req, res) => {
   try {
@@ -49,24 +67,45 @@ app.post('/api/report', async (req, res) => {
     if (!d || typeof d.type !== 'string') {
       return res.status(400).json({ error: 'missing drift result' });
     }
-    const drift = {
-      type: d.type,
-      metric: String(d.metric || ''),
-      percent: Number(d.percent) || 0,
-      startDate: typeof d.startDate === 'string' ? d.startDate.slice(0, 40) : '',
-      weeks: Number(d.weeks) || 0,
-      coverageDays: Number(d.coverageDays) || 0,
-      confidence: String(d.confidence || 'low'),
-      topClusters: Array.isArray(d.topClusters) ? d.topClusters.slice(0, 3).map(String) : [],
-      habitChanges: Array.isArray(d.habitChanges)
-        ? d.habitChanges.slice(0, 3).map((s) => String(s).slice(0, 200))
-        : [],
-    };
-    const report = await writeReport(drift);
+    const report = await writeReport(shapeDrift(d));
     res.json({ report, mode: agentMode });
   } catch (err) {
     console.error('[/api/report]', err);
     res.status(500).json({ error: 'report generation failed' });
+  }
+});
+
+// 3. Chat. Same privacy envelope: only the drift summary + the already-written
+// report + the reader's own questions. No raw titles or habit data are accepted.
+app.post('/api/chat', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const d = b.drift;
+    if (!d || typeof d.type !== 'string') {
+      return res.status(400).json({ error: 'missing drift result' });
+    }
+    const question = typeof b.question === 'string' ? b.question.slice(0, 500) : '';
+    if (!question.trim()) return res.status(400).json({ error: 'empty question' });
+
+    const r = b.report || {};
+    const report = {
+      headline: String(r.headline || '').slice(0, 400),
+      driving: String(r.driving || '').slice(0, 400),
+      changed: String(r.changed || '').slice(0, 600),
+      tryThis: String(r.tryThis || '').slice(0, 400),
+    };
+    const history = Array.isArray(b.history)
+      ? b.history
+          .filter((m) => m && typeof m.content === 'string')
+          .slice(-8)
+          .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 1000) }))
+      : [];
+
+    const result = await chatAboutDrift({ drift: shapeDrift(d), report, history, question });
+    res.json({ ...result, mode: agentMode });
+  } catch (err) {
+    console.error('[/api/chat]', err);
+    res.status(500).json({ error: 'chat failed' });
   }
 });
 

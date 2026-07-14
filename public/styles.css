@@ -167,6 +167,25 @@ section { max-width: var(--maxw); margin: 0 auto; padding: 5rem 1.5rem; }
 .mini-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--warm), var(--hot)); }
 .mini-label { display: flex; justify-content: space-between; font-size: .82rem; color: var(--muted); margin-bottom: .35rem; }
 
+/* chat — ask about your drift */
+.chat { margin-top: 1.8rem; border-top: 1px solid var(--line); padding-top: 1.4rem; }
+.chat .chat-k { color: var(--accent); }
+.chat-hint { color: var(--faint); font-size: .86rem; margin: 0 0 1rem; }
+.chat-log { display: flex; flex-direction: column; gap: .6rem; margin-bottom: .9rem; }
+.chat-log:empty { display: none; }
+.chat-msg { max-width: 85%; padding: .65rem .9rem; border-radius: 14px; font-size: .96rem; line-height: 1.5; white-space: pre-wrap; }
+.chat-msg.user { align-self: flex-end; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #06121f; border-bottom-right-radius: 5px; }
+.chat-msg.assistant { align-self: flex-start; background: var(--card-2); border: 1px solid var(--line); color: var(--text); border-bottom-left-radius: 5px; }
+.chat-msg.typing { color: var(--muted); font-style: italic; }
+.chat-suggest { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .9rem; }
+.chip-btn { cursor: pointer; font: inherit; color: var(--muted); transition: background .15s, color .15s, border-color .15s; }
+.chip-btn:hover { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card-2)); }
+.chat-form { display: flex; gap: .6rem; align-items: stretch; }
+.chat-form input { flex: 1; min-width: 0; background: var(--card-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 10px; padding: .6rem .8rem; font: inherit; font-size: .95rem; }
+.chat-form input:focus { outline: none; border-color: var(--accent); }
+.chat-form .btn { white-space: nowrap; }
+
 /* privacy */
 .privacy p { color: var(--muted); max-width: 720px; }
 .never { list-style: none; padding: 0; margin: 1.6rem 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; max-width: 720px; }
@@ -214,6 +233,9 @@ section { max-width: var(--maxw); margin: 0 auto; padding: 5rem 1.5rem; }
   .report-card { padding: 1.35rem; border-radius: 16px; }
   .report h2.headline { font-size: 1.35rem; }
   .report-foot .btn { width: 100%; }
+  .chat-msg { max-width: 92%; }
+  .chat-form { flex-direction: column; }
+  .chat-form .btn { width: 100%; }
   .paste-fallback { padding: 1.1rem 1.15rem; }
   .paste-actions { gap: .6rem; }
   .paste-actions .btn, .paste-source { width: 100%; }

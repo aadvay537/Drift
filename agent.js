@@ -127,6 +127,98 @@ export function mockLabel(it) {
 }
 
 // ---------------------------------------------------------------------------
+// 4. CHAT  — let the reader ask questions about their OWN drift result.
+//
+// Grounded strictly in the small drift summary + the written report that were
+// already computed for them — nothing new about the reader is sent. Same calm,
+// non-judgmental tone rules as the report writer, enforced with the same BANNED
+// list. No key (or any failure) → a deterministic, still-helpful mock answer.
+// ---------------------------------------------------------------------------
+
+const CHAT_SYSTEM =
+  "You are Drift's assistant. The reader has just been shown a media-literacy \"drift\" report — a calm " +
+  'mirror of how their own recommendation feed shifted over time, compared ONLY to their own earlier weeks. ' +
+  'Answer their questions about this report, and about how recommendation feeds and media literacy work in general. ' +
+  'Tone rules you MUST obey (a mirror, not a filter): no scare words; never claim the algorithm CAUSED their ' +
+  'behaviour (show patterns, not proof); never compare them to other people; never diagnose; no guilt, scores, or ' +
+  'streaks; never ask how they feel emotionally. Be warm, plain and brief — at most one short paragraph (2-4 ' +
+  'sentences). Ground every claim about THEIR data in the drift facts you are given, and never invent numbers that ' +
+  "aren't there. If they ask something the data can't answer (why it happened, what happens next, who they are), say " +
+  'plainly that Drift only shows patterns in what they already watched — it cannot know the cause or the future. ' +
+  'If a question is unrelated to their drift or to media literacy, answer briefly and gently steer back.';
+
+/**
+ * Answer one question about the reader's drift result.
+ * @param {object} p
+ * @param {object} p.drift    the (already-shared) drift summary
+ * @param {object} p.report   the written report {headline,driving,changed,tryThis}
+ * @param {{role:string,content:string}[]} p.history  prior completed turns (user/assistant pairs)
+ * @param {string} p.question the new question
+ * @returns {Promise<{answer:string, source:string}>}
+ */
+export async function chatAboutDrift({ drift, report, history = [], question }) {
+  const q = String(question || '').trim();
+  if (!q) return { answer: 'Ask me anything about your drift report.', source: hasKey ? 'live' : 'mock' };
+  if (!hasKey) return { answer: mockChat(drift, report, q), source: 'mock' };
+
+  try {
+    const context =
+      'The reader\'s report — the ONLY data you may reference:\n' +
+      JSON.stringify({ drift: driftFacts(drift), report }, null, 0);
+    const messages = [
+      ...history
+        .filter((m) => m && typeof m.content === 'string' && m.content.trim())
+        .slice(-8)
+        .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 1000) })),
+      { role: 'user', content: q },
+    ];
+    const msg = await client.messages.create({
+      model: MODEL,
+      max_tokens: 700, // headroom for a thinking block + a short answer
+      system: CHAT_SYSTEM + '\n\n' + context,
+      messages,
+    });
+    const text = msg.content.map((c) => (c.type === 'text' ? c.text : '')).join('').trim();
+    const lower = text.toLowerCase();
+    // Reuse the report's tone guard: a scare/causal/comparison phrase → safe fallback.
+    if (!text || BANNED.some((w) => lower.includes(w))) {
+      return { answer: mockChat(drift, report, q), source: 'fallback' };
+    }
+    return { answer: text, source: 'ai' };
+  } catch (err) {
+    console.warn('[agent] chat fell back to mock:', err.message);
+    return { answer: mockChat(drift, report, q), source: 'mock' };
+  }
+}
+
+// Deterministic assistant — used with no API key and as the live fallback.
+function mockChat(drift, report, q) {
+  const ql = q.toLowerCase();
+  const typeName = {
+    escalation: 'emotional escalation', narrowing: 'narrowing',
+    engagement: 'engagement drift', mixed: 'a mixed, unclear signal',
+    insufficient: 'not enough history to call a type yet',
+  }[drift?.type] || 'your result';
+
+  if (/priv|data|sent|safe|secure|leak/.test(ql)) {
+    return 'Only cleaned-up titles and this small drift summary ever left your browser — no channels, handles, timestamps, or habit data. Everything about when and how long you watched was worked out on your own device.';
+  }
+  if (/why|cause|because|reason/.test(ql)) {
+    return `Drift can only show the pattern in what you already watched — it can't know why it happened or prove the feed caused it. What it can point to is this: ${report.driving}`;
+  }
+  if (/(what|which).*(do|should|try|change|next|now)/.test(ql)) {
+    return `Nothing here needs fixing — it's a mirror, not a verdict. If you're curious, one low-pressure idea: ${report.tryThis}`;
+  }
+  if (/confiden|accur|sure|trust|reliab|wrong/.test(ql)) {
+    return `This is a ${drift?.confidence || 'low'}-confidence read, based on about ${drift?.coverageDays || 0} days of history. More history would sharpen it — Drift only compares you to your own earlier weeks, never to anyone else.`;
+  }
+  if (/(what|which).*(type|kind|drift|mean|result)|explain|meaning/.test(ql)) {
+    return `Your report came out as ${typeName}. ${report.headline} In plain terms, Drift lines your recent weeks up against your own earlier weeks and names the pattern it sees — it doesn't rank you or claim the feed caused it.`;
+  }
+  return `Here's what your report shows: ${report.driving} ${report.changed} You can ask me what the drift type means, why it might have shown up, whether it's reliable, or what happened to your data.`;
+}
+
+// ---------------------------------------------------------------------------
 // 2 + 3. REPORT WRITER  →  TONE CHECKER  (with fallback)
 // ---------------------------------------------------------------------------
 
