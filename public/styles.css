@@ -29,6 +29,7 @@ html { scroll-behavior: smooth; }
 body {
   margin: 0; font-family: var(--font); background: var(--bg); color: var(--text);
   line-height: 1.55; -webkit-font-smoothing: antialiased;
+  overflow-x: hidden; overflow-wrap: break-word;
   background-image: radial-gradient(1200px 600px at 70% -10%, rgba(124,196,255,.08), transparent 60%),
                     radial-gradient(900px 500px at 10% 0%, rgba(169,155,255,.07), transparent 55%);
 }
@@ -191,4 +192,35 @@ section { max-width: var(--maxw); margin: 0 auto; padding: 5rem 1.5rem; }
   .threes, .get-grid { grid-template-columns: 1fr; }
   .nav-links a:not(.gh) { display: none; }
   .never { grid-template-columns: 1fr; }
+  section { padding: 3.2rem 1.15rem; }
+  .hero { padding-top: 2.6rem; }
+  .hero h1 br { display: none; }          /* let the headline wrap naturally, no overflow */
+}
+
+@media (max-width: 560px) {
+  section { padding: 2.4rem 1.05rem; }
+  .nav { gap: .7rem; padding: .7rem 1.05rem; }
+  .brand { font-size: 1.05rem; }
+  .mode-badge { font-size: .68rem; padding: .18rem .4rem; }
+  .hero { padding-top: 1.8rem; padding-bottom: 1.4rem; }
+  .hero h1 { font-size: clamp(1.7rem, 8.5vw, 2.4rem); }
+  .lede { font-size: 1rem; margin-top: 1rem; }
+  .hero-cta { gap: .6rem; margin: 1.6rem 0 1rem; }
+  .hero-cta .btn { width: 100%; }         /* full-width, easy to tap */
+  .threes article, .card { padding: 1.25rem; }
+  .pipeline li { padding: 1.1rem 1.1rem 1.1rem 3.4rem; }
+  .pipeline li::before { left: 1rem; top: 1.1rem; width: 1.7rem; height: 1.7rem; font-size: .85rem; }
+  .why-split { padding-left: .8rem; }
+  .report-card { padding: 1.35rem; border-radius: 16px; }
+  .report h2.headline { font-size: 1.35rem; }
+  .report-foot .btn { width: 100%; }
+  .paste-fallback { padding: 1.1rem 1.15rem; }
+  .paste-actions { gap: .6rem; }
+  .paste-actions .btn, .paste-source { width: 100%; }
+  .modal { padding: 1rem; }
+  .modal-card { padding: 1.35rem; }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions .btn { width: 100%; }
+  .send-stats { gap: .7rem; }
+  .foot { padding: 2rem 1.15rem; }
 }
