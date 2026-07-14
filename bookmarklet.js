@@ -103,17 +103,55 @@ void (async function () {
 
   var harvest = isYouTube ? harvestYouTube : harvestReddit;
 
-  // ---- auto-scroll until no new items load (or we hit a safe limit) --------
-  var MAX_ROUNDS = 120, MAX_ITEMS = 5000, stable = 0;
-  for (var round = 0; round < MAX_ROUNDS; round++) {
+  // ---- auto-scroll to the bottom, one viewport at a time ------------------
+  // YouTube's history list is VIRTUALIZED: cards far from the viewport are
+  // deleted from the DOM and only re-created as you approach them. Jumping
+  // straight to scrollHeight therefore skips right over most of your history —
+  // those cards never render, so they can never be read. That is why a full
+  // 100+ video history used to come back as ~12 items. Instead we step down by
+  // less than one screen at a time and harvest after every step, so each card
+  // is read while it is briefly alive in the DOM. We keep going until the page
+  // can neither scroll further nor grow taller for several tries in a row.
+  var MAX_ITEMS = 5000;
+  var MAX_TIME_MS = 8 * 60 * 1000;      // hard stop so it can never hang forever
+  var startMs = RUN_NOW.getTime();
+  var stable = 0;                        // consecutive "nothing changed" steps
+  var lastLog = -1;
+
+  while (true) {
     harvest();
-    bar.textContent = 'Drift: loading your history… ' + seen.size + ' items';
+    if (seen.size !== lastLog) { bar.textContent = 'Drift: loading your history… ' + seen.size + ' items'; lastLog = seen.size; }
     if (seen.size >= MAX_ITEMS) break;
-    var before = seen.size;
-    window.scrollTo(0, document.documentElement.scrollHeight);
-    await sleep(900);
+    if (new Date().getTime() - startMs > MAX_TIME_MS) break;
+
+    var beforeCount = seen.size;
+    var beforeH = document.documentElement.scrollHeight;
+    var beforeY = window.scrollY || window.pageYOffset || 0;
+
+    // Step down ~85% of a screen so nothing between here and there is skipped.
+    var step = Math.max(500, Math.floor((window.innerHeight || 800) * 0.85));
+    window.scrollBy(0, step);
+    await sleep(650);          // let the next batch of cards render
     harvest();
-    if (seen.size === before) { stable++; if (stable >= 3) break; } else { stable = 0; }
+
+    var afterH = document.documentElement.scrollHeight;
+    var afterY = window.scrollY || window.pageYOffset || 0;
+    var gainedItems = seen.size > beforeCount;
+    var pageGrew = afterH > beforeH + 4;      // more history lazy-loaded in
+    var didMove = afterY > beforeY + 4;       // we actually scrolled somewhere
+
+    if (gainedItems || pageGrew || didMove) {
+      stable = 0;
+    } else {
+      // Nothing new — but the last batch may just be slow. Wait a bit longer,
+      // give it a firm nudge to the very bottom to trigger lazy-loading, and
+      // only give up after several genuinely empty tries.
+      stable++;
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      await sleep(1100);
+      harvest();
+      if (stable >= 5) break;
+    }
   }
   harvest();
   window.scrollTo(0, 0);
