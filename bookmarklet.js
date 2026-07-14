@@ -53,49 +53,55 @@ void (async function () {
   bar.textContent = 'Drift: loading your history…';
   document.body.appendChild(bar);
 
-  var CARDS = isYouTube
-    ? 'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer'
-    : 'shreddit-post, article';
-
-  // ---- read one card ------------------------------------------------------
-  function readYouTube(card) {
-    var title = txt(card, '#video-title') || txt(card, 'a#video-title-link') || txt(card, '#video-title-link');
-    if (!title) return null;
-    var section = card.closest('ytd-item-section-renderer');
-    var dateLabel = section ? txt(section, '#title, #header #title, .ytd-item-section-header-renderer') : '';
-    return {
-      title: title,
-      channel: txt(card, 'ytd-channel-name #text') || txt(card, '#channel-name #text') || txt(card, '#channel-name'),
-      durationSec: toSeconds(
-        txt(card, 'ytd-thumbnail-overlay-time-status-renderer #text') ||
-        txt(card, '.badge-shape-wiz__text') ||
-        txt(card, '#time-status #text')
-      ),
-      watchedAt: parseDate(dateLabel)
-    };
-  }
-  function readReddit(card) {
-    var title = txt(card, 'a[slot="title"]') || txt(card, 'h3') || txt(card, '[id^="post-title"]');
-    if (!title) return null;
-    var time = card.querySelector('time');
-    return {
-      title: title,
-      channel: txt(card, 'a[href^="/r/"]'),
-      durationSec: 0,
-      watchedAt: (time && time.getAttribute('datetime')) || RUN_NOW.toISOString()
-    };
-  }
-
-  // ---- collect as we scroll (so nothing is lost if the page recycles cards) -
+  // ---- collect as we scroll, into a de-duped map, so nothing is lost even if
+  //      the page recycles old cards (new Reddit) as you move down ------------
   var seen = new Map();
-  function harvest() {
-    document.querySelectorAll(CARDS).forEach(function (card) {
-      var item = isYouTube ? readYouTube(card) : readReddit(card);
-      if (!item || !item.title) return;
-      var key = item.title + '|' + item.channel + '|' + item.watchedAt;
-      if (!seen.has(key)) seen.set(key, item);
+
+  // YouTube: find the actual video *links* (/watch?v=…). Anchoring on the link
+  // instead of a specific custom-element tag survives YouTube's layout changes,
+  // which is what makes "no history found" happen with tag-based selectors.
+  function harvestYouTube() {
+    var links = document.querySelectorAll('a#video-title-link');
+    if (!links.length) links = document.querySelectorAll('a[href*="/watch?v="]');
+    links.forEach(function (a) {
+      var href = a.getAttribute('href') || '';
+      if (href.indexOf('/watch') === -1) return;
+      var title = (a.getAttribute('title') || a.textContent || a.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+      if (!title) return;
+      var m = href.match(/[?&]v=([\w-]+)/);
+      var vid = m ? m[1] : title;
+      var card = a.closest('ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer') || a.parentElement || a;
+      var section = a.closest('ytd-item-section-renderer');
+      var dateLabel = section ? txt(section, '#title, #header #title, .ytd-item-section-header-renderer') : '';
+      var when = parseDate(dateLabel);
+      var key = vid + '|' + when;
+      if (seen.has(key)) return;
+      seen.set(key, {
+        title: title,
+        channel: txt(card, 'ytd-channel-name #text') || txt(card, '#channel-name #text') || txt(card, '#channel-name'),
+        durationSec: toSeconds(
+          txt(card, 'ytd-thumbnail-overlay-time-status-renderer #text') ||
+          txt(card, '.badge-shape-wiz__text') ||
+          txt(card, '#time-status #text')
+        ),
+        watchedAt: when
+      });
     });
   }
+
+  function harvestReddit() {
+    document.querySelectorAll('shreddit-post, article').forEach(function (card) {
+      var title = txt(card, 'a[slot="title"]') || txt(card, 'h3') || txt(card, '[id^="post-title"]');
+      if (!title) return;
+      var time = card.querySelector('time');
+      var when = (time && time.getAttribute('datetime')) || RUN_NOW.toISOString();
+      var key = title + '|' + when;
+      if (seen.has(key)) return;
+      seen.set(key, { title: title, channel: txt(card, 'a[href^="/r/"]'), durationSec: 0, watchedAt: when });
+    });
+  }
+
+  var harvest = isYouTube ? harvestYouTube : harvestReddit;
 
   // ---- auto-scroll until no new items load (or we hit a safe limit) --------
   var MAX_ROUNDS = 120, MAX_ITEMS = 5000, stable = 0;
