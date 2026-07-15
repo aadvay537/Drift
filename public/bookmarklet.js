@@ -38,34 +38,49 @@ void (function () {
   }
 
   // "Today" / "Yesterday" / "Jun 12, 2026" -> ISO date. Deterministic per run.
+  // Hardened: only text that actually LOOKS like a date is parsed. Otherwise a
+  // stray video title with a year in it (e.g. "2001: A Space Odyssey") would
+  // parse to Jan 2001 and blow the report up to "9162 days of history". Any
+  // result outside a sane window is rejected and falls back to today.
   function parseDate(label) {
     var now = new Date(RUN_NOW.getTime());
     if (!label) return now.toISOString();
     var l = label.toLowerCase();
     if (l.indexOf('today') !== -1) return now.toISOString();
     if (l.indexOf('yesterday') !== -1) { now.setDate(now.getDate() - 1); return now.toISOString(); }
+    var looksDatey =
+      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(label) ||
+      /\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/.test(label);
+    if (!looksDatey) return now.toISOString();
     var d = new Date(label);
-    return isNaN(d.getTime()) ? now.toISOString() : d.toISOString();
+    if (isNaN(d.getTime())) return now.toISOString();
+    var min = new Date('2005-02-01').getTime();     // YouTube did not exist before this
+    var max = now.getTime() + 24 * 3600 * 1000;      // no "watched in the future"
+    if (d.getTime() < min || d.getTime() > max) return now.toISOString();
+    return d.toISOString();
   }
 
   // ---- collect into a de-duped map, so nothing is lost even when the page
   //      recycles old cards out of view as you scroll ------------------------
   var seen = new Map();
 
-  // YouTube: find the actual video *links* (/watch?v=…). Anchoring on the link
-  // instead of a specific custom-element tag survives YouTube's layout changes,
-  // which is what makes "no history found" happen with tag-based selectors.
+  // YouTube: scan EVERY link to a video — normal videos (/watch?v=…) AND Shorts
+  // (/shorts/…). Anchoring on the link, not a specific custom-element tag,
+  // survives YouTube's frequent layout changes (tag-based selectors are what
+  // make "no history found" happen), and picking up both URL shapes is why
+  // Shorts-heavy histories used to come back nearly empty.
+  var CARD_SEL = 'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-reel-item-renderer, ytm-shorts-lockup-view-model, ytd-compact-video-renderer';
   function harvestYouTube() {
-    var links = document.querySelectorAll('a#video-title-link');
-    if (!links.length) links = document.querySelectorAll('a[href*="/watch?v="]');
+    var links = document.querySelectorAll('a[href*="/watch?v="], a[href*="/shorts/"]');
     links.forEach(function (a) {
       var href = a.getAttribute('href') || '';
-      if (href.indexOf('/watch') === -1) return;
-      var title = (a.getAttribute('title') || a.textContent || a.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+      var m = href.match(/[?&]v=([\w-]+)/) || href.match(/\/shorts\/([\w-]+)/);
+      if (!m) return;
+      var vid = m[1];
+      var card = a.closest(CARD_SEL) || a.parentElement || a;
+      var title = (a.getAttribute('title') || a.getAttribute('aria-label') || a.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!title) title = txt(card, '#video-title') || txt(card, 'h3') || txt(card, '[id^="video-title"]');
       if (!title) return;
-      var m = href.match(/[?&]v=([\w-]+)/);
-      var vid = m ? m[1] : title;
-      var card = a.closest('ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer') || a.parentElement || a;
       var section = a.closest('ytd-item-section-renderer');
       var dateLabel = section ? txt(section, '#title, #header #title, .ytd-item-section-header-renderer') : '';
       var when = parseDate(dateLabel);
@@ -117,20 +132,42 @@ void (function () {
   panel.appendChild(btn);
   document.body.appendChild(panel);
 
-  // Keep collecting as you scroll: on every scroll (capture=true catches scroll
-  // on inner containers too, not just the window) and on a steady timer as a
-  // safety net, so nothing slips past between scrolls.
+  // Keep collecting as you scroll. Three overlapping nets so nothing is missed,
+  // even though YouTube deletes each card the instant it scrolls out of view:
+  //   1. A MutationObserver fires the moment ANY new card is inserted — this is
+  //      the important one: it catches every card while it is briefly alive,
+  //      no matter how fast you scroll past it.
+  //   2. A scroll listener (capture=true also catches inner-container scrolls).
+  //   3. A steady timer, as a final safety net.
   function tick() {
     harvest();
     label.textContent = 'Drift is watching — scroll slowly. Collected ' + seen.size + ' item' + (seen.size === 1 ? '' : 's') + '. Press Download when you reach the bottom.';
   }
-  tick();
+  // The observer can fire a flood of mutations while scrolling, so throttle the
+  // actual work to ~every 120ms (leading + trailing) — fast enough to catch a
+  // card before it is recycled away, cheap enough not to lag the page.
+  var lastRun = 0, trailing = null;
+  function runTick() { lastRun = Date.now(); tick(); }
+  function throttled() {
+    var since = Date.now() - lastRun;
+    if (since >= 120) { runTick(); }
+    else if (!trailing) { trailing = setTimeout(function () { trailing = null; runTick(); }, 120 - since); }
+  }
+  runTick();
+  var observer = new MutationObserver(throttled);
+  observer.observe(document.body, { childList: true, subtree: true });
   var timer = setInterval(tick, 600);
-  window.addEventListener('scroll', tick, true);
+  window.addEventListener('scroll', throttled, true);
+
+  function stop() {
+    clearInterval(timer);
+    if (trailing) { clearTimeout(trailing); trailing = null; }
+    window.removeEventListener('scroll', throttled, true);
+    try { observer.disconnect(); } catch (e) {}
+  }
 
   btn.addEventListener('click', function () {
-    clearInterval(timer);
-    window.removeEventListener('scroll', tick, true);
+    stop();
     harvest();
     panel.remove();
 

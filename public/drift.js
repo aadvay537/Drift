@@ -22,8 +22,18 @@ const SESSION_GAP_MS = 30 * 60 * 1000; // >30 min gap = a new watch session
  * @returns {object} drift result consumed by agent.writeReport()
  */
 export function computeDrift(items) {
+  // Reject implausible timestamps outright: nothing before YouTube existed and
+  // nothing in the future. A single garbage date (a mis-parsed title, a stray
+  // year) would otherwise inflate coverageDays into the thousands and make every
+  // derived percentage nonsense ("9162 days of history", "1433% more sessions").
+  const MIN_T = new Date('2005-02-01').getTime();
+  const MAX_T = Date.now() + 2 * 86400000;
   const clean = (items || [])
-    .filter((it) => it && it.watchedAt && Number.isFinite(new Date(it.watchedAt).getTime()))
+    .filter((it) => {
+      if (!it || !it.watchedAt) return false;
+      const t = new Date(it.watchedAt).getTime();
+      return Number.isFinite(t) && t >= MIN_T && t <= MAX_T;
+    })
     .map((it) => ({
       topic: it.topic || 'other',
       intensity: num(it.intensity, 0.35),
