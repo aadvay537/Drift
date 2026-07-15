@@ -20,9 +20,14 @@ fetch('/api/status').then((r) => r.json()).then((s) => {
 // and the code you can read are provably the same thing.
 fetch('bookmarklet.js').then((r) => r.text()).then((src) => {
   $('#bmSource').textContent = src;
+  // NOTE: trailing "code; // comment" must be stripped BEFORE newlines are
+  // collapsed — otherwise one such comment swallows the entire rest of the
+  // one-line bookmarklet and it silently does nothing. The [^:] guard leaves
+  // "https://" untouched. Full-line and block comments are removed too.
   const min = 'javascript:' + encodeURIComponent(
     src.replace(/\/\*[\s\S]*?\*\//g, '')       // block comments
-       .replace(/^\s*\/\/.*$/gm, '')            // line comments
+       .replace(/^\s*\/\/.*$/gm, '')            // whole-line comments
+       .replace(/([^:])\/\/[^\n]*/g, '$1')      // trailing comments (keep URLs)
        .replace(/\n\s*/g, ' ')                  // collapse whitespace
        .trim()
   );

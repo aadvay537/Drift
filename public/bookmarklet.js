@@ -103,20 +103,47 @@ void (async function () {
 
   var harvest = isYouTube ? harvestYouTube : harvestReddit;
 
-  // ---- auto-scroll to the bottom, one viewport at a time ------------------
-  // YouTube's history list is VIRTUALIZED: cards far from the viewport are
-  // deleted from the DOM and only re-created as you approach them. Jumping
-  // straight to scrollHeight therefore skips right over most of your history —
-  // those cards never render, so they can never be read. That is why a full
-  // 100+ video history used to come back as ~12 items. Instead we step down by
-  // less than one screen at a time and harvest after every step, so each card
-  // is read while it is briefly alive in the DOM. We keep going until the page
-  // can neither scroll further nor grow taller for several tries in a row.
+  // ---- auto-scroll to the bottom, batch by batch --------------------------
+  // The reliable way to advance an infinite-scroll feed is NOT window.scrollBy:
+  // YouTube's history often scrolls an inner container, not the window, so
+  // window scrolling silently does nothing and you get only the first screen
+  // (~12 items). Instead we grab the LAST loaded card and pull it into view.
+  // scrollIntoView works no matter which ancestor actually scrolls, and it is
+  // exactly what triggers YouTube to lazy-load the next batch. We also nudge
+  // every scrollable container as a belt-and-braces fallback, then harvest.
   var MAX_ITEMS = 5000;
-  var MAX_TIME_MS = 8 * 60 * 1000;      // hard stop so it can never hang forever
+  // MAX_TIME_MS is a hard stop so it can never hang forever; stable counts
+  // consecutive "nothing changed" tries before we decide we're at the end.
+  var MAX_TIME_MS = 10 * 60 * 1000;
   var startMs = RUN_NOW.getTime();
-  var stable = 0;                        // consecutive "nothing changed" steps
+  var stable = 0;
   var lastLog = -1;
+
+  function lastCard() {
+    var links = document.querySelectorAll('a#video-title-link, a[href*="/watch?v="], shreddit-post, article');
+    return links.length ? links[links.length - 1] : null;
+  }
+
+  // Push the feed down one batch. Returns the tallest scroll height we saw so
+  // the caller can tell whether anything new actually loaded.
+  function scrollDown() {
+    var last = lastCard();
+    if (last && last.scrollIntoView) { try { last.scrollIntoView({ block: 'end', inline: 'nearest' }); } catch (e) {} }
+    var step = Math.max(800, (window.innerHeight || 800));
+    try { window.scrollBy(0, step); } catch (e) {}
+    var maxH = document.documentElement.scrollHeight;
+    // Nudge any inner element that has its own scrollbar (covers YouTube's
+    // container-scrolled layouts) and track the tallest one.
+    var all = document.querySelectorAll('div, main, ytd-app, #contents, #primary');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (el.scrollHeight > el.clientHeight + 40) {
+        try { el.scrollTop = el.scrollTop + step; } catch (e) {}
+        if (el.scrollHeight > maxH) maxH = el.scrollHeight;
+      }
+    }
+    return maxH;
+  }
 
   while (true) {
     harvest();
@@ -125,36 +152,35 @@ void (async function () {
     if (new Date().getTime() - startMs > MAX_TIME_MS) break;
 
     var beforeCount = seen.size;
-    var beforeH = document.documentElement.scrollHeight;
-    var beforeY = window.scrollY || window.pageYOffset || 0;
-
-    // Step down ~85% of a screen so nothing between here and there is skipped.
-    var step = Math.max(500, Math.floor((window.innerHeight || 800) * 0.85));
-    window.scrollBy(0, step);
-    await sleep(650);          // let the next batch of cards render
+    // scrollDown() scrolls the feed AND returns the tallest scroll height.
+    var beforeH = scrollDown();
+    // Give the next batch a moment to lazy-load and render, then read it.
+    await sleep(1000);
     harvest();
 
     var afterH = document.documentElement.scrollHeight;
-    var afterY = window.scrollY || window.pageYOffset || 0;
-    var gainedItems = seen.size > beforeCount;
-    var pageGrew = afterH > beforeH + 4;      // more history lazy-loaded in
-    var didMove = afterY > beforeY + 4;       // we actually scrolled somewhere
+    var all2 = document.querySelectorAll('div, main, ytd-app, #contents, #primary');
+    for (var j = 0; j < all2.length; j++) { if (all2[j].scrollHeight > afterH) afterH = all2[j].scrollHeight; }
 
-    if (gainedItems || pageGrew || didMove) {
+    // gained = we read new videos; grew = more history lazy-loaded in.
+    var gained = seen.size > beforeCount;
+    var grew = afterH > beforeH + 4;
+
+    if (gained || grew) {
       stable = 0;
     } else {
-      // Nothing new — but the last batch may just be slow. Wait a bit longer,
-      // give it a firm nudge to the very bottom to trigger lazy-loading, and
-      // only give up after several genuinely empty tries.
+      // Nothing new this time — but the batch may just be slow to arrive.
+      // Wait longer and try again; only give up after several empty tries.
       stable++;
-      window.scrollTo(0, document.documentElement.scrollHeight);
-      await sleep(1100);
+      await sleep(1400);
+      scrollDown();
+      await sleep(900);
       harvest();
-      if (stable >= 5) break;
+      if (stable >= 6) break;
     }
   }
   harvest();
-  window.scrollTo(0, 0);
+  try { window.scrollTo(0, 0); } catch (e) {}
   bar.remove();
 
   var items = Array.from(seen.values()).slice(0, MAX_ITEMS);
