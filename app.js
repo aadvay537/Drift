@@ -1,7 +1,7 @@
 // app.js — the browser orchestrator (PRD §4). Nothing identifying leaves this file
 // except cleaned titles, and only after you approve the "what we send" preview.
 import { computeDrift, RULES_VERSION, THRESHOLDS } from './drift.js';
-import { normalizeHistoryFile, ensureUsableTimeline, parseFlexibleDate } from './normalize.js';
+import { normalizeHistoryFile, ensureUsableTimeline, parseFlexibleDate, cleanItems } from './normalize.js';
 
 const $ = (s) => document.querySelector(s);
 let pending = null; // { source, items, cleaned } waiting on the send-preview confirm
@@ -116,7 +116,8 @@ function ingest(raw) {
   // Accept every shape we know: the bookmarklet's file, a pasted-text parse,
   // the sample file, or Google Takeout's watch-history.json.
   const file = normalizeHistoryFile(raw) || raw;
-  const items = (file?.items || []).filter((it) => it && it.title);
+  // Drop duration-overlay noise ("9:30:00") the bookmarklet sometimes grabs as a title.
+  const items = cleanItems(file?.items);
   if (!items.length) {
     return showError('No history items found in that. Drop the bookmarklet\'s drift-history…json or Google Takeout\'s watch-history.json (JSON format — see the no-scroll option above).');
   }

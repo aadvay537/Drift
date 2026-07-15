@@ -69,6 +69,25 @@ export function parseFlexibleDate(label, now = new Date()) {
 // slice (newest first). Matches the server's own per-analysis labeling cap.
 export const TAKEOUT_MAX_ITEMS = 1000;
 
+// The bookmarklet sometimes captures a card's duration overlay ("9:30:00", "2:55")
+// or a stray UI marker ("SHORTS SHORTS Now playing") as if it were a video title.
+// These aren't real titles — they'd be mislabeled "other" and quietly skew the
+// topic mix — so we drop them before anything is analysed. A real title is never
+// just a timestamp. Kept deliberately narrow so genuine short titles survive.
+const JUNK_TITLE = /^(\d{1,2}:\d{2}(:\d{2})?|shorts shorts now playing|now playing|shorts)$/i;
+export function isRealTitle(title) {
+  const t = String(title || '').trim();
+  return t.length > 0 && !JUNK_TITLE.test(t);
+}
+
+/**
+ * Keep only items that carry a real title. Used by both file paths so the
+ * bookmarklet's duration-overlay noise never reaches the labeler or the rules.
+ */
+export function cleanItems(items) {
+  return (items || []).filter((it) => it && isRealTitle(it.title));
+}
+
 /**
  * Accept every history file shape we know and return {source, items, ...}:
  *   - the bookmarklet's own file: { source, items: [...] }
