@@ -3,14 +3,16 @@
  *
  * What it does, and ONLY this:
  *   - Runs on the history page you clicked it on (YouTube or Reddit).
- *   - Auto-scrolls the page for you to load your older history.
+ *   - Does NOT move the page for you. YOU scroll softly down your history;
+ *     it just watches and collects each card as it passes by.
  *   - Reads each video/post card: title, channel, duration, and date. Nothing else.
- *   - Saves ONE small JSON file straight to your device. It talks to no server.
+ *   - When you press "Download my history", saves ONE small JSON file straight
+ *     to your device. It talks to no server.
  *
  * It cannot see your password, your other tabs, or anything beyond this page.
  * This is the exact code behind the draggable button — read it top to bottom.
  */
-void (async function () {
+void (function () {
   var host = location.hostname;
   var isReddit = host.indexOf('reddit') !== -1;
   var isYouTube = host.indexOf('youtube') !== -1;
@@ -21,12 +23,11 @@ void (async function () {
   }
 
   // ---- small helpers ------------------------------------------------------
-  // Snapshot "now" ONCE. We re-read the same cards on every scroll pass, so
-  // relative dates ("Today"/"Yesterday") MUST resolve identically each time —
-  // otherwise the same video gets a new timestamp per pass and never de-dupes.
+  // Snapshot "now" ONCE. We re-read the same cards many times while you scroll,
+  // so relative dates ("Today"/"Yesterday") MUST resolve identically each time —
+  // otherwise the same video gets a new timestamp per read and never de-dupes.
   var RUN_NOW = new Date();
 
-  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function txt(el, sel) { if (!el) return ''; var n = el.querySelector(sel); return n ? n.textContent.trim() : ''; }
 
   // "12:34" or "1:02:03" -> seconds.
@@ -47,14 +48,8 @@ void (async function () {
     return isNaN(d.getTime()) ? now.toISOString() : d.toISOString();
   }
 
-  // ---- a tiny status bar so you can see it working ------------------------
-  var bar = document.createElement('div');
-  bar.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:2147483647;background:#111;color:#fff;font:600 14px/1.4 system-ui,-apple-system,sans-serif;padding:10px 16px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.35);pointer-events:none;';
-  bar.textContent = 'Drift: loading your history…';
-  document.body.appendChild(bar);
-
-  // ---- collect as we scroll, into a de-duped map, so nothing is lost even if
-  //      the page recycles old cards (new Reddit) as you move down ------------
+  // ---- collect into a de-duped map, so nothing is lost even when the page
+  //      recycles old cards out of view as you scroll ------------------------
   var seen = new Map();
 
   // YouTube: find the actual video *links* (/watch?v=…). Anchoring on the link
@@ -103,98 +98,55 @@ void (async function () {
 
   var harvest = isYouTube ? harvestYouTube : harvestReddit;
 
-  // ---- auto-scroll to the bottom, batch by batch --------------------------
-  // The reliable way to advance an infinite-scroll feed is NOT window.scrollBy:
-  // YouTube's history often scrolls an inner container, not the window, so
-  // window scrolling silently does nothing and you get only the first screen
-  // (~12 items). Instead we grab the LAST loaded card and pull it into view.
-  // scrollIntoView works no matter which ancestor actually scrolls, and it is
-  // exactly what triggers YouTube to lazy-load the next batch. We also nudge
-  // every scrollable container as a belt-and-braces fallback, then harvest.
-  var MAX_ITEMS = 5000;
-  // MAX_TIME_MS is a hard stop so it can never hang forever; stable counts
-  // consecutive "nothing changed" tries before we decide we're at the end.
-  var MAX_TIME_MS = 10 * 60 * 1000;
-  var startMs = RUN_NOW.getTime();
-  var stable = 0;
-  var lastLog = -1;
+  // ---- a little panel: live counter + the download button -----------------
+  // We deliberately do NOT scroll the page. You scroll softly to the bottom of
+  // your history yourself; this panel just shows the running count and lets you
+  // save when you are done. Scrolling by hand is what reliably loads older
+  // history, and going gently keeps each card on screen long enough to be read.
+  var panel = document.createElement('div');
+  panel.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:12px;background:#111;color:#fff;font:600 14px/1.4 system-ui,-apple-system,sans-serif;padding:10px 14px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.35);';
 
-  function lastCard() {
-    var links = document.querySelectorAll('a#video-title-link, a[href*="/watch?v="], shreddit-post, article');
-    return links.length ? links[links.length - 1] : null;
-  }
+  var label = document.createElement('span');
+  label.textContent = 'Drift is watching — scroll slowly to the bottom of your history…';
 
-  // Push the feed down one batch. Returns the tallest scroll height we saw so
-  // the caller can tell whether anything new actually loaded.
-  function scrollDown() {
-    var last = lastCard();
-    if (last && last.scrollIntoView) { try { last.scrollIntoView({ block: 'end', inline: 'nearest' }); } catch (e) {} }
-    var step = Math.max(800, (window.innerHeight || 800));
-    try { window.scrollBy(0, step); } catch (e) {}
-    var maxH = document.documentElement.scrollHeight;
-    // Nudge any inner element that has its own scrollbar (covers YouTube's
-    // container-scrolled layouts) and track the tallest one.
-    var all = document.querySelectorAll('div, main, ytd-app, #contents, #primary');
-    for (var i = 0; i < all.length; i++) {
-      var el = all[i];
-      if (el.scrollHeight > el.clientHeight + 40) {
-        try { el.scrollTop = el.scrollTop + step; } catch (e) {}
-        if (el.scrollHeight > maxH) maxH = el.scrollHeight;
-      }
-    }
-    return maxH;
-  }
+  var btn = document.createElement('button');
+  btn.textContent = 'Download my history';
+  btn.style.cssText = 'cursor:pointer;border:0;border-radius:9px;padding:8px 12px;font:700 13px system-ui,sans-serif;background:linear-gradient(135deg,#ffb27c,#ff8a8a);color:#2a0f0f;';
 
-  while (true) {
+  panel.appendChild(label);
+  panel.appendChild(btn);
+  document.body.appendChild(panel);
+
+  // Keep collecting as you scroll: on every scroll (capture=true catches scroll
+  // on inner containers too, not just the window) and on a steady timer as a
+  // safety net, so nothing slips past between scrolls.
+  function tick() {
     harvest();
-    if (seen.size !== lastLog) { bar.textContent = 'Drift: loading your history… ' + seen.size + ' items'; lastLog = seen.size; }
-    if (seen.size >= MAX_ITEMS) break;
-    if (new Date().getTime() - startMs > MAX_TIME_MS) break;
+    label.textContent = 'Drift is watching — scroll slowly. Collected ' + seen.size + ' item' + (seen.size === 1 ? '' : 's') + '. Press Download when you reach the bottom.';
+  }
+  tick();
+  var timer = setInterval(tick, 600);
+  window.addEventListener('scroll', tick, true);
 
-    var beforeCount = seen.size;
-    // scrollDown() scrolls the feed AND returns the tallest scroll height.
-    var beforeH = scrollDown();
-    // Give the next batch a moment to lazy-load and render, then read it.
-    await sleep(1000);
+  btn.addEventListener('click', function () {
+    clearInterval(timer);
+    window.removeEventListener('scroll', tick, true);
     harvest();
+    panel.remove();
 
-    var afterH = document.documentElement.scrollHeight;
-    var all2 = document.querySelectorAll('div, main, ytd-app, #contents, #primary');
-    for (var j = 0; j < all2.length; j++) { if (all2[j].scrollHeight > afterH) afterH = all2[j].scrollHeight; }
-
-    // gained = we read new videos; grew = more history lazy-loaded in.
-    var gained = seen.size > beforeCount;
-    var grew = afterH > beforeH + 4;
-
-    if (gained || grew) {
-      stable = 0;
-    } else {
-      // Nothing new this time — but the batch may just be slow to arrive.
-      // Wait longer and try again; only give up after several empty tries.
-      stable++;
-      await sleep(1400);
-      scrollDown();
-      await sleep(900);
-      harvest();
-      if (stable >= 6) break;
+    var items = Array.from(seen.values());
+    if (!items.length) {
+      alert('Drift: no history cards found. Make sure you are on your history page (youtube.com/feed/history, or your Reddit profile), scroll through it a little, then try again.');
+      return;
     }
-  }
-  harvest();
-  try { window.scrollTo(0, 0); } catch (e) {}
-  bar.remove();
 
-  var items = Array.from(seen.values()).slice(0, MAX_ITEMS);
-  if (!items.length) {
-    alert('Drift: no history cards found here. Make sure you are on your history page (youtube.com/feed/history, or your Reddit profile) and try again.');
-    return;
-  }
-
-  // ---- save one small file straight to your device ------------------------
-  var file = { source: isReddit ? 'reddit' : 'youtube', grabbedAt: new Date().toISOString(), count: items.length, items: items };
-  var blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'drift-history-' + file.source + '.json';
-  a.click();
-  alert('Drift: saved ' + items.length + ' items to your downloads. Now drop that file into the Drift site.');
+    // ---- save one small file straight to your device ----------------------
+    var file = { source: isReddit ? 'reddit' : 'youtube', grabbedAt: new Date().toISOString(), count: items.length, items: items };
+    var blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'drift-history-' + file.source + '.json';
+    a.click();
+    alert('Drift: saved ' + items.length + ' items to your downloads. Now drop that file into the Drift site.');
+  });
 })();
