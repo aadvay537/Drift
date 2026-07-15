@@ -1,7 +1,7 @@
 // Minimal check that the drift rules are deterministic and catch escalation —
 // plus the normalize layer that makes real-world (messy-dated) files analysable.
 import { computeDrift } from '../public/drift.js';
-import { parseFlexibleDate, normalizeHistoryFile, ensureUsableTimeline, TAKEOUT_MAX_ITEMS } from '../public/normalize.js';
+import { parseFlexibleDate, normalizeHistoryFile, ensureUsableTimeline, cleanItems, isRealTitle, TAKEOUT_MAX_ITEMS } from '../public/normalize.js';
 import { mockLabel } from '../agent.js';
 import { readFileSync } from 'node:fs';
 
@@ -61,6 +61,18 @@ const real = Array.from({ length: 40 }, (_, i) => ({
 const before = JSON.stringify(real.map((x) => x.watchedAt));
 const kept = ensureUsableTimeline(real);
 assert(kept.estimated === false && JSON.stringify(real.map((x) => x.watchedAt)) === before, 'real multi-day timeline untouched');
+
+// ---- junk-title filter: duration overlays the bookmarklet mis-grabs ----
+assert(isRealTitle('Rohit Sharma the GOAT') === true, 'a real title survives');
+assert(isRealTitle('9:30:00') === false, 'pure duration "9:30:00" is junk');
+assert(isRealTitle('2:55') === false, 'pure duration "2:55" is junk');
+assert(isRealTitle('SHORTS SHORTS Now playing') === false, 'the "Now playing" UI marker is junk');
+assert(isRealTitle('19:04') === false, 'pure duration "19:04" is junk');
+assert(isRealTitle('') === false, 'empty title is junk');
+const mixedBag = cleanItems([
+  { title: '9:30:00' }, { title: 'Real video title here' }, { title: '2:55' }, { title: 'Another real one' },
+]);
+assert(mixedBag.length === 2, `cleanItems drops the durations, keeps real titles (${mixedBag.length}/2)`);
 
 // ---- Google Takeout watch-history.json (the no-scroll path) ----
 const takeout = Array.from({ length: 30 }, (_, i) => ({
