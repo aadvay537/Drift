@@ -56,6 +56,8 @@ function shapeDrift(d) {
     type: d.type,
     metric: String(d.metric || ''),
     percent: Number(d.percent) || 0,
+    driftScore: Number.isFinite(Number(d.driftScore)) ? Number(d.driftScore) : null,
+    severity: String(d.severity || 'none'),
     startDate: typeof d.startDate === 'string' ? d.startDate.slice(0, 40) : '',
     weeks: Number(d.weeks) || 0,
     coverageDays: Number(d.coverageDays) || 0,

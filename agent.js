@@ -145,6 +145,7 @@ const DRIFT_KB = [
   '- Drift is a media-literacy tool, "a mirror, not a filter". You grab your own YouTube or Reddit history with one click and, in about two minutes, see what kind of algorithmic influence your feed has been under. It never blocks, ranks, filters, lectures, or gives scores/streaks.',
   '- The pipeline has 5 steps: (1) your history file is parsed IN YOUR BROWSER and never uploaded; (2) it is cleaned locally — channel names and @handles are stripped; (3) only the cleaned TITLES are sent to an AI labeller that tags each one\'s topic and how emotionally charged it is (0-1), then the titles are deleted; (4) fixed, published MATH in your browser decides your drift type — not the AI; (5) an AI writes a short report and a SECOND AI tone-checks it (if that fails twice you get a plain pre-written version).',
   '- Three drift types, with published thresholds, comparing the LATER half of your timeline to your OWN earlier half: NARROWING = your distinct topics shrink more than 15%; ESCALATION = your average emotional intensity rises more than 10%; ENGAGEMENT DRIFT = your videos get more than 20% shorter AND your watch sessions get more than 25% more frequent. If none clear their line → "mixed / unclear". If there is not enough history → "insufficient" (it refuses to guess).',
+  '- The DRIFT SCORE is one number from 0-100: how far the reader\'s recent weeks moved from their OWN earlier weeks, blended across the three dimensions (each normalized to its own threshold; the strongest sets the score on a saturating curve where crossing a threshold is about 50 and an extreme shift approaches 100, with a small bump when several dimensions move at once). Bands: subtle (under 34), moderate (34-66), strong (67+). It is a MAGNITUDE, never a verdict of good or bad — a high score just means a bigger shift away from your earlier self, and even a "mixed" result has a score.',
   '- It compares you only to your OWN earlier weeks, never to other people. The same file always gives the same answer (rules v3.1 — anyone can read exactly how it decides).',
   '- Privacy: your raw file, channel names, handles, and every timestamp stay in your browser. Only cleaned titles and a tiny, non-identifying drift summary are ever sent; the AI service deletes them and never trains on them. Your habit patterns (when and how long you watch) are computed entirely on your device. Before anything is sent, you see exactly what will be sent.',
   '- The EASIEST way to get your history is Google Takeout (takeout.google.com) — no scrolling at all: click "Deselect all", tick only "YouTube and YouTube Music", click "All YouTube data included" and keep only "history", click "Multiple formats" and set History to JSON, then export. Google emails a zip in minutes; inside it, Takeout → YouTube and YouTube Music → history → watch-history.json is the file to drop into Drift. It covers the complete history with exact dates, but has no video durations, so engagement drift can\'t be detected from it (narrowing and escalation work fully).',
@@ -309,6 +310,9 @@ async function writeReportLive(drift) {
       'own earlier weeks. End "changed" with a gentle reflective question about how they want their ' +
       'time or week to look — modelled on "Is this how you want your week to look?". ' +
       'Do NOT phrase it as an emotions check-in (never "how does that feel", "how do you feel about"). ' +
+      'You are given a driftScore (0-100) and a severity band (subtle/moderate/strong): this is HOW FAR ' +
+      'their recent weeks moved from their own earlier weeks — a magnitude of change, never good or bad. ' +
+      'You may weave the score or band into the headline naturally, but never grade it as good/bad/healthy. ' +
       'Return ONLY JSON: {"headline","driving","changed","tryThis"}. ' +
       'headline: one sentence naming the drift type + the number + rough date. ' +
       'driving: one sentence on the 2-3 topic clusters behind it. ' +
@@ -377,6 +381,8 @@ function driftFacts(drift) {
     type: drift.type,
     metric: drift.metric,
     percent: drift.percent,
+    driftScore: drift.driftScore,
+    severity: drift.severity,
     startDate: drift.startDate,
     weeks: drift.weeks,
     topClusters: drift.topClusters,

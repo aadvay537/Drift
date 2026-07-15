@@ -47,7 +47,7 @@ export function computeDrift(items) {
     : 0;
 
   if (clean.length < MIN_ITEMS || coverageDays < MIN_DAYS) {
-    return { type: 'insufficient', confidence: 'none', coverageDays, itemCount: clean.length, weeks: 0, percent: 0, topClusters: [], habitChanges: [], metric: '', startDate: '' };
+    return { type: 'insufficient', confidence: 'none', coverageDays, itemCount: clean.length, weeks: 0, percent: 0, driftScore: null, severity: 'none', topClusters: [], habitChanges: [], metric: '', startDate: '' };
   }
 
   // Split the timeline in half: "early" baseline vs "late" recent.
@@ -72,6 +72,26 @@ export function computeDrift(items) {
   const shorterChange = eDur ? (eDur - lDur) / eDur : 0;                 // videos shorter
   const moreOftenChange = eSess ? (lSess - eSess) / eSess : 0;           // sessions more frequent
 
+  // ---- Drift Score: ONE number, 0-100, for "how much did my recent weeks move
+  // from my own earlier weeks?" It is a MAGNITUDE, never a verdict of good/bad —
+  // narrowing or escalation aren't "bad", they're just measurable. Each of the
+  // three dimensions is normalized to its OWN published threshold so they're
+  // comparable, then the strongest one sets the score on a saturating curve:
+  //   at the threshold (mag 1) → 50   ·   2× → 67   ·   3× → 75   ·   extreme → 100.
+  // A small bump is added when several dimensions drift at once (a broader shift
+  // than any single signal shows). Everything here is auditable arithmetic.
+  const mags = [
+    Math.max(0, narrowingChange) / THRESHOLDS.narrowing,
+    Math.max(0, escalationChange) / THRESHOLDS.escalation,
+    Math.min(Math.max(0, shorterChange) / THRESHOLDS.engagementShorter,
+             Math.max(0, moreOftenChange) / THRESHOLDS.engagementMoreOften),
+  ];
+  const topMag = Math.max(0, ...mags);
+  const firing = mags.filter((m) => m >= 1).length;
+  let driftScore = Math.round(100 * topMag / (topMag + 1));
+  if (firing >= 2) driftScore = Math.min(100, driftScore + 5 * (firing - 1));
+  const severity = severityFor(driftScore);
+
   const candidates = [];
   if (narrowingChange > THRESHOLDS.narrowing) {
     candidates.push({ type: 'narrowing', metric: 'distinct topics', percent: pct(narrowingChange), score: narrowingChange / THRESHOLDS.narrowing });
@@ -89,7 +109,7 @@ export function computeDrift(items) {
   const habitChanges = describeHabits({ eDur, lDur, eSess, lSess, late: safeLate });
 
   if (!candidates.length) {
-    return { type: 'mixed', confidence: confidenceFor(clean.length, coverageDays, 0), coverageDays, itemCount: clean.length, weeks, percent: 0, metric: '', startDate, topClusters, habitChanges };
+    return { type: 'mixed', confidence: confidenceFor(clean.length, coverageDays, 0), coverageDays, itemCount: clean.length, weeks, percent: 0, driftScore, severity, metric: '', startDate, topClusters, habitChanges };
   }
 
   candidates.sort((a, b) => b.score - a.score);
@@ -98,6 +118,8 @@ export function computeDrift(items) {
     type: win.type,
     metric: win.metric,
     percent: win.percent,
+    driftScore,
+    severity,
     startDate,
     weeks,
     coverageDays,
@@ -107,6 +129,16 @@ export function computeDrift(items) {
     habitChanges,
     allSignals: candidates.map((c) => ({ type: c.type, percent: c.percent })),
   };
+}
+
+// Score → plain-language band. Deliberately about STRENGTH of the shift, not
+// good/bad: Drift compares you only to your own earlier weeks.
+export function severityFor(score) {
+  if (score == null) return 'none';
+  if (score >= 67) return 'strong';
+  if (score >= 34) return 'moderate';
+  if (score > 0) return 'subtle';
+  return 'flat';
 }
 
 // --- pieces -----------------------------------------------------------------

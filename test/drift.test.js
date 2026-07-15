@@ -1,6 +1,6 @@
 // Minimal check that the drift rules are deterministic and catch escalation —
 // plus the normalize layer that makes real-world (messy-dated) files analysable.
-import { computeDrift } from '../public/drift.js';
+import { computeDrift, severityFor } from '../public/drift.js';
 import { parseFlexibleDate, normalizeHistoryFile, ensureUsableTimeline, cleanItems, isRealTitle, TAKEOUT_MAX_ITEMS } from '../public/normalize.js';
 import { mockLabel } from '../agent.js';
 import { readFileSync } from 'node:fs';
@@ -22,6 +22,21 @@ assert(a.type !== 'insufficient', `classified the sample (got "${a.type}", ${a.p
 assert(['escalation', 'engagement', 'narrowing', 'mixed'].includes(a.type), 'returns a known drift type');
 assert(a.confidence && ['low', 'medium', 'high'].includes(a.confidence), `has confidence: ${a.confidence}`);
 assert(computeDrift([]).type === 'insufficient', 'empty input → insufficient (honest)');
+
+// ---- Drift Score: 0-100 magnitude + severity band ----
+assert(typeof a.driftScore === 'number' && a.driftScore >= 0 && a.driftScore <= 100, `sample has a Drift Score in range (${a.driftScore})`);
+assert(['subtle','moderate','strong'].includes(a.severity), `sample has a severity band (${a.severity})`);
+assert(computeDrift([]).driftScore === null, 'insufficient result has no score (null)');
+assert(severityFor(0) === 'flat' && severityFor(20) === 'subtle' && severityFor(50) === 'moderate' && severityFor(80) === 'strong', 'severity bands map correctly');
+// a bigger shift must score higher than a smaller one (same size/coverage)
+const mkTimeline = (intensityLate) => Array.from({ length: 40 }, (_, i) => ({
+  topic: 'news_politics', intensity: i < 20 ? 0.3 : intensityLate, durationSec: 300,
+  watchedAt: new Date(Date.UTC(2026, 0, 1 + i)).toISOString(),
+}));
+const mild = computeDrift(mkTimeline(0.36)); // +20% intensity
+const wild = computeDrift(mkTimeline(0.60)); // +100% intensity
+assert(wild.driftScore > mild.driftScore, `a bigger escalation scores higher (${wild.driftScore} > ${mild.driftScore})`);
+assert(typeof computeDrift(mkTimeline(0.30)).driftScore === 'number', 'even a "mixed" (no shift) result still carries a score');
 
 // ---- parseFlexibleDate: the year-less / weekday headers YouTube really shows ----
 const NOW = new Date('2026-07-14T18:00:00'); // a Tuesday
