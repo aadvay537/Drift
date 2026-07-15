@@ -313,8 +313,11 @@ async function writeReportLive(drift) {
       'You are given a driftScore (0-100) and a severity band (subtle/moderate/strong): this is HOW FAR ' +
       'their recent weeks moved from their own earlier weeks — a magnitude of change, never good or bad. ' +
       'You may weave the score or band into the headline naturally, but never grade it as good/bad/healthy. ' +
+      'The `weeks` field is how many weeks the WHOLE analysed history spans, and `startDate` is the ' +
+      'date that history BEGINS. They go together: "over the last N weeks" or "over ~N weeks since <startDate>" ' +
+      'are both fine, but NEVER pair the week count with any other date — do not invent a different start. ' +
       'Return ONLY JSON: {"headline","driving","changed","tryThis"}. ' +
-      'headline: one sentence naming the drift type + the number + rough date. ' +
+      'headline: one sentence naming the drift type + the number + the startDate (if used, it must match weeks). ' +
       'driving: one sentence on the 2-3 topic clusters behind it. ' +
       'changed: 1-3 short sentences on habit changes vs their own earlier weeks, ending in a question. ' +
       'tryThis: one optional, low-pressure suggestion matched to the drift type.',
