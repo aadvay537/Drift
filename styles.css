@@ -181,6 +181,25 @@ kbd { display: inline-block; padding: .05rem .4rem; margin: 0 .05rem; border-rad
 .mini-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--warm), var(--hot)); }
 .mini-label { display: flex; justify-content: space-between; font-size: .82rem; color: var(--muted); margin-bottom: .35rem; }
 
+/* Drift Score — the one headline number: a circular dial + a plain-language band */
+.drift-score { display: flex; align-items: center; gap: 1.2rem; margin: 1.3rem 0; padding: 1.2rem;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--card-2); }
+.ds-dial { --pct: 0; --ring: var(--warm); position: relative; flex: 0 0 auto; width: 104px; height: 104px; border-radius: 50%;
+  background: conic-gradient(var(--ring) calc(var(--pct) * 1%), color-mix(in srgb, var(--line) 60%, transparent) 0);
+  display: grid; place-items: center; }
+.ds-dial::after { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: var(--card); }
+.ds-num { position: relative; z-index: 1; font-size: 1.9rem; font-weight: 800; line-height: 1; color: var(--text); }
+.ds-num small { font-size: .8rem; font-weight: 600; color: var(--faint); }
+.ds-band { font-size: 1.05rem; font-weight: 800; color: var(--text); margin-bottom: .25rem; }
+.ds-sub { font-size: .86rem; color: var(--muted); line-height: 1.45; }
+/* the ring colour tracks the severity band */
+.drift-score.sev-strong   .ds-dial { --ring: var(--hot); }
+.drift-score.sev-moderate .ds-dial { --ring: var(--warm); }
+.drift-score.sev-subtle   .ds-dial { --ring: var(--accent); }
+.drift-score.sev-flat     .ds-dial { --ring: color-mix(in srgb, var(--good) 70%, var(--line)); }
+.drift-score.sev-strong   .ds-band { color: var(--hot); }
+@media (max-width: 520px) { .drift-score { flex-direction: column; text-align: center; gap: .9rem; } }
+
 /* always-on assistant — floating launcher + panel */
 .chat-fab { position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 50; display: flex; align-items: center; gap: .5rem;
   padding: .7rem 1.15rem; border: none; border-radius: 999px; cursor: pointer; font: inherit; font-weight: 700;

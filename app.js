@@ -236,6 +236,21 @@ function renderReport(drift, report, source) {
   const signalChips = (drift.allSignals || []).map((s) =>
     `<span class="chip">${TYPE_LABEL[s.type] || s.type}: +${s.percent}%</span>`).join('');
 
+  // The Drift Score: one honest number for "how far my recent weeks moved from
+  // my own earlier weeks". Shown for every real result — including "mixed",
+  // where it's the only magnitude there is. It is strength, not a good/bad grade.
+  const SEV_LABEL = { strong: 'Strong drift', moderate: 'Moderate drift', subtle: 'Subtle drift', flat: 'Barely any drift' };
+  const scoreBlock = isReal && typeof drift.driftScore === 'number' ? `
+    <div class="drift-score sev-${drift.severity}">
+      <div class="ds-dial" style="--pct:${drift.driftScore}">
+        <div class="ds-num">${drift.driftScore}<small>/100</small></div>
+      </div>
+      <div class="ds-meta">
+        <div class="ds-band">${SEV_LABEL[drift.severity] || 'Drift'}</div>
+        <div class="ds-sub">How much your recent weeks moved from your own earlier weeks. Higher = a bigger shift — not good or bad, just how far you drifted from yourself.</div>
+      </div>
+    </div>` : '';
+
   const metricBar = isReal && drift.type !== 'mixed' ? `
     <div class="mini-metric">
       <div class="mini-label"><span>${escapeHtml(drift.metric || 'shift')}</span><span>+${drift.percent}% vs your earlier weeks</span></div>
@@ -252,6 +267,7 @@ function renderReport(drift, report, source) {
         <span class="badge">${escapeHtml(source)}</span>
       </div>
       <h2 class="headline">${escapeHtml(report.headline)}</h2>
+      ${scoreBlock}
       ${metricBar}
       <div class="block"><div class="k">What's driving it</div><p>${escapeHtml(report.driving)}</p></div>
       <div class="block"><div class="k">What changed with it</div><p>${escapeHtml(report.changed)}</p></div>
