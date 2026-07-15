@@ -262,7 +262,7 @@ function renderReport(drift, report, source) {
       <div class="report-badges">
         <span class="badge type">${escapeHtml(type)}</span>
         ${isReal ? `<span class="badge ${confClass}">${drift.confidence} confidence</span>` : ''}
-        <span class="badge">${drift.coverageDays || 0} days of history</span>
+        <span class="badge">${drift.coverageDays || 0} days${drift.startDate && drift.endDate ? ` · ${escapeHtml(drift.startDate)}–${escapeHtml(drift.endDate)}` : ' of history'}</span>
         ${drift.estimatedDates ? '<span class="badge">dates estimated</span>' : ''}
         <span class="badge">${escapeHtml(source)}</span>
       </div>

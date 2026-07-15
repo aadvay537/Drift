@@ -104,12 +104,17 @@ export function computeDrift(items) {
   }
 
   const weeks = Math.max(1, Math.round(coverageDays / 7));
-  const startDate = fmtDate(safeLate[0].t);
+  // startDate is when the WHOLE analysed history begins — it must pair with
+  // `weeks` (a "N weeks since <startDate>" phrase has to be internally true).
+  // Using the late-half midpoint here instead once produced "9 weeks since
+  // Jun 13", which is impossible: 9 weeks before Jul 14 is May 11, not Jun 13.
+  const startDate = fmtDate(clean[0].t);
+  const endDate = fmtDate(clean[clean.length - 1].t);
   const topClusters = dominantShiftTopics(safeEarly, safeLate);
   const habitChanges = describeHabits({ eDur, lDur, eSess, lSess, late: safeLate });
 
   if (!candidates.length) {
-    return { type: 'mixed', confidence: confidenceFor(clean.length, coverageDays, 0), coverageDays, itemCount: clean.length, weeks, percent: 0, driftScore, severity, metric: '', startDate, topClusters, habitChanges };
+    return { type: 'mixed', confidence: confidenceFor(clean.length, coverageDays, 0), coverageDays, itemCount: clean.length, weeks, percent: 0, driftScore, severity, metric: '', startDate, endDate, topClusters, habitChanges };
   }
 
   candidates.sort((a, b) => b.score - a.score);
@@ -121,6 +126,7 @@ export function computeDrift(items) {
     driftScore,
     severity,
     startDate,
+    endDate,
     weeks,
     coverageDays,
     itemCount: clean.length,
