@@ -74,7 +74,7 @@ export const TAKEOUT_MAX_ITEMS = 1000;
 // These aren't real titles — they'd be mislabeled "other" and quietly skew the
 // topic mix — so we drop them before anything is analysed. A real title is never
 // just a timestamp. Kept deliberately narrow so genuine short titles survive.
-const JUNK_TITLE = /^(\d{1,2}:\d{2}(:\d{2})?|shorts shorts now playing|now playing|shorts)$/i;
+const JUNK_TITLE = /^(\d{1,2}:\d{2}(:\d{2})?|shorts( shorts)?( now playing)?|now playing|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}(,? \d{4})?|today|yesterday)$/i;
 export function isRealTitle(title) {
   const t = String(title || '').trim();
   return t.length > 0 && !JUNK_TITLE.test(t);

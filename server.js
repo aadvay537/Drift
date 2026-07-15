@@ -17,8 +17,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json({ limit: '2mb' }));
+// no-store: the browser must re-fetch app.js/normalize.js/bookmarklet source on
+// every load. A cached stale app.js once made a fixed bug look unfixed for a
+// whole day — these files are tiny, so freshness beats caching here.
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-store'),
+}));
 
 // Tell the frontend whether a real API key is present (affects a small banner only).
 app.get('/api/status', (_req, res) => {

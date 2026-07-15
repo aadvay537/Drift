@@ -69,6 +69,11 @@ assert(isRealTitle('2:55') === false, 'pure duration "2:55" is junk');
 assert(isRealTitle('SHORTS SHORTS Now playing') === false, 'the "Now playing" UI marker is junk');
 assert(isRealTitle('19:04') === false, 'pure duration "19:04" is junk');
 assert(isRealTitle('') === false, 'empty title is junk');
+assert(isRealTitle('May 22, 2026') === false, 'a grabbed date header is junk');
+assert(isRealTitle('Jul 10') === false, 'a year-less date header is junk');
+assert(isRealTitle('Today') === false, '"Today" header is junk');
+assert(isRealTitle('#shorts') === true, 'hashtag-only titles are real (genuine Shorts titles)');
+assert(isRealTitle('May the force be with you') === true, 'titles STARTING with a month word survive');
 const mixedBag = cleanItems([
   { title: '9:30:00' }, { title: 'Real video title here' }, { title: '2:55' }, { title: 'Another real one' },
 ]);
