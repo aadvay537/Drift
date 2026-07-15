@@ -93,6 +93,14 @@ void (function () {
   // make "no history found" happen), and picking up both URL shapes is why
   // Shorts-heavy histories used to come back nearly empty.
   var CARD_SEL = 'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-reel-item-renderer, ytm-shorts-lockup-view-model, ytd-compact-video-renderer';
+  // A video card has TWO links to the same video: the thumbnail and the title.
+  // The thumbnail comes first in the page, and its text is the duration overlay
+  // ("9:30:00") — grabbing it as the title used to waste ~10% of every file on
+  // junk rows AND block the real title from being stored (same de-dupe key).
+  // So: anything that looks like a duration, a UI marker, or a date header is
+  // not a title — fall back to the card's own title node, or skip this link and
+  // let the real title link add the video a moment later.
+  var JUNK_TITLE = /^(\d{1,2}:\d{2}(:\d{2})?|now playing|shorts( shorts)?( now playing)?|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}(, \d{4})?|today|yesterday)$/i;
   function harvestYouTube() {
     var links = document.querySelectorAll('a[href*="/watch?v="], a[href*="/shorts/"]');
     links.forEach(function (a) {
@@ -102,8 +110,8 @@ void (function () {
       var vid = m[1];
       var card = a.closest(CARD_SEL) || a.parentElement || a;
       var title = (a.getAttribute('title') || a.getAttribute('aria-label') || a.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!title) title = txt(card, '#video-title') || txt(card, 'h3') || txt(card, '[id^="video-title"]');
-      if (!title) return;
+      if (!title || JUNK_TITLE.test(title)) title = txt(card, '#video-title') || txt(card, 'h3') || txt(card, '[id^="video-title"]');
+      if (!title || JUNK_TITLE.test(title)) return;
       var section = a.closest('ytd-item-section-renderer');
       // The date is the section's header ("Today" / "Jul 10, 2026"). Try the header
       // element first, then broader fallbacks — a missed header used to stamp every
