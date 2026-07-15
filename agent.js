@@ -147,7 +147,8 @@ const DRIFT_KB = [
   '- Three drift types, with published thresholds, comparing the LATER half of your timeline to your OWN earlier half: NARROWING = your distinct topics shrink more than 15%; ESCALATION = your average emotional intensity rises more than 10%; ENGAGEMENT DRIFT = your videos get more than 20% shorter AND your watch sessions get more than 25% more frequent. If none clear their line → "mixed / unclear". If there is not enough history → "insufficient" (it refuses to guess).',
   '- It compares you only to your OWN earlier weeks, never to other people. The same file always gives the same answer (rules v3.1 — anyone can read exactly how it decides).',
   '- Privacy: your raw file, channel names, handles, and every timestamp stay in your browser. Only cleaned titles and a tiny, non-identifying drift summary are ever sent; the AI service deletes them and never trains on them. Your habit patterns (when and how long you watch) are computed entirely on your device. Before anything is sent, you see exactly what will be sent.',
-  '- The bookmarklet is a bookmark that runs a tiny script: drag it to your bookmarks bar once, open your history page and scroll back a few weeks, then click it — it saves one small file you drop back on the site. It talks to no server and only reads the page you click it on. On mobile you can paste the script into a bookmark, or use the paste-in fallback (which loses video durations, so engagement drift can\'t be detected that way).',
+  '- The EASIEST way to get your history is Google Takeout (takeout.google.com) — no scrolling at all: click "Deselect all", tick only "YouTube and YouTube Music", click "All YouTube data included" and keep only "history", click "Multiple formats" and set History to JSON, then export. Google emails a zip in minutes; inside it, Takeout → YouTube and YouTube Music → history → watch-history.json is the file to drop into Drift. It covers the complete history with exact dates, but has no video durations, so engagement drift can\'t be detected from it (narrowing and escalation work fully).',
+  '- The bookmarklet is a bookmark that runs a tiny script: drag it to your bookmarks bar once, open your history page, click it, and scroll gently while its counter shows items and days collected — it saves one small file you drop back on the site. It talks to no server and only reads the page you click it on. It does capture video durations, so it\'s the only path that can detect engagement drift. If it was installed a while ago it should be dragged up again to replace the old copy — a saved bookmark keeps the old script. On mobile you can paste the script into a bookmark, or use the paste-in fallback (which also loses durations).',
   '- Modes: with an API key Drift uses Claude live; without one it runs a deterministic "demo engine" so everything still works end to end. A badge at the top-right shows which mode is active.',
 ].join('\n');
 
@@ -222,8 +223,11 @@ function mockChat(drift, report, q) {
   }
   // Bookmarklet / getting-started is checked BEFORE the generic "how it works"
   // so "what is the bookmarklet and how do I use it?" lands here.
+  if (/takeout|watch-history|no.?scroll|whole history|full history|complete history/.test(ql)) {
+    return 'Google Takeout is the easiest route — no scrolling: at takeout.google.com click "Deselect all", tick only YouTube, keep only "history" under "All YouTube data included", set the format to JSON under "Multiple formats", and export. Google emails you a small zip in a few minutes; drop its watch-history.json file into Drift. You get your complete history with exact dates — only video durations are missing, so engagement drift can\'t be measured that way.';
+  }
   if (/bookmarklet|grab my history|get started|getting started|how (do i|to|can i) (get|grab|start|use)|get my report|install/.test(ql)) {
-    return 'The bookmarklet is just a bookmark that runs a tiny script. Drag it to your bookmarks bar once, open your YouTube history page and scroll back a few weeks so older items load, then click it — it saves one small file you drop back here. It talks to no server and only reads the page you click it on. On a phone you can copy the script into a bookmark instead, or use the paste-in fallback.';
+    return 'Two ways. Easiest: Google Takeout (takeout.google.com) — export only your YouTube history as JSON and drop the watch-history.json file here; no scrolling needed. Or use the bookmarklet: drag it to your bookmarks bar once, open your YouTube history page, click it, and scroll gently while the counter shows items and days collected — then download and drop the file here. The bookmarklet also captures video durations, which Takeout doesn\'t.';
   }
   if (/how (does|do|is|are|it)|how it works|pipeline|\bsteps?\b|what is drift|what'?s drift|what does (it|drift) do/.test(ql)) {
     return 'Drift reads your own watch history in five steps: your file is parsed in your browser (never uploaded), cleaned so channels and handles are stripped, then only the titles go to an AI that tags each one\'s topic and emotional intensity. Fixed, published math in your browser then decides your "drift type", and finally one AI writes a short report while a second one tone-checks it. The AI reads and writes — it never judges you; the judgment comes from plain, auditable rules.';
@@ -432,9 +436,9 @@ function fallbackReport(drift) {
 function insufficientReport(drift) {
   return {
     headline: 'Not enough history yet to call a drift type.',
-    driving: `This file covers about ${drift.coverageDays || 0} days. The rules need more to be honest.`,
-    changed: 'Scroll further back on your history page and grab it again — a month of depth gives a clearer read.',
-    tryThis: 'For now, try the "sample data" button to see what a full report looks like.',
+    driving: `This file only held ${drift.itemCount || 0} usable videos across about ${drift.coverageDays || 0} days. The rules need at least 15 to be honest.`,
+    changed: 'The easiest fix is Google Takeout (the no-scroll option on the site): it exports your complete history in a few minutes, no scrolling needed.',
+    tryThis: 'Or try the "sample data" button to see what a full report looks like.',
     toneChecked: true,
     source: 'insufficient',
   };

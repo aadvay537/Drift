@@ -95,6 +95,12 @@ section { max-width: var(--maxw); margin: 0 auto; padding: 5rem 1.5rem; }
 
 /* get grid */
 .get-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; align-items: start; }
+/* the recommended no-scroll (Google Takeout) card sits above the grid, full width */
+.card.reco { border-color: var(--accent); margin-bottom: 1.6rem; }
+.reco-tag { display: inline-block; vertical-align: middle; margin-left: .5rem; padding: .15rem .55rem;
+  border-radius: 999px; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #06121f; }
+.path-or { color: var(--muted); font-size: .93rem; margin: 0 0 1.2rem; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.6rem; position: relative; }
 .card-step { position: absolute; top: -.8rem; left: 1.4rem; width: 1.8rem; height: 1.8rem; border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #06121f; font-weight: 700;

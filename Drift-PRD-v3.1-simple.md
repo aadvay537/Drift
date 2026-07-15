@@ -18,19 +18,22 @@ Drift is a mirror, not a filter. It never blocks anything or tells you what to w
 2. **What changed alongside it.** Late-night watching, binge sessions, shorter attention to each video.
 3. **One thing to try.** A single, optional suggestion. Never a lecture.
 
-## 3. Getting your data: the bookmarklet
+## 3. Getting your data: Takeout first, bookmarklet second
 
-A bookmarklet is a bookmark that runs a tiny script instead of opening a page. Setup is one drag, use is one click:
+**Recommended path — Google Takeout (no scrolling).** A history-only Takeout export arrives in minutes, not hours: takeout.google.com → Deselect all → tick YouTube → keep only "history" → set format to JSON → export. Google emails a small zip; the `watch-history.json` inside drops straight into Drift. It carries the user's complete history with exact timestamps — the highest-quality timeline we can get. (Takeout has no video durations, so Engagement drift can't fire from it; Narrowing and Escalation work at full strength.)
+
+**Alternative — the bookmarklet.** A bookmarklet is a bookmark that runs a tiny script instead of opening a page. Setup is one drag, use is one click:
 
 1. On the Drift site, drag the **"Grab my history"** button to your bookmarks bar. (Mobile: copy-paste it into a bookmark — we show a 15-second how-to.)
-2. Open your own YouTube history page (youtube.com/feed/history) and scroll down for a minute — each scroll loads older videos. A month of scrolling depth is plenty.
-3. Click the bookmarklet. It reads the page you're looking at and downloads one small file: video titles, channels, durations, and dates. Nothing else. It cannot see your password, other tabs, or anything beyond the page on your screen.
+2. Open your own YouTube history page (youtube.com/feed/history), click the bookmarklet, and scroll gently — its live counter shows items *and days* collected. 15+ videos across 10+ days is enough; a few weeks is sharper.
+3. It reads the page you're looking at and downloads one small file: video titles, channels, durations, and dates. Nothing else. It cannot see your password, other tabs, or anything beyond the page on your screen. (Because it captures durations, this is the only path that can detect Engagement drift.)
 4. Drop that file into Drift. Analysis starts immediately.
 
 Same flow for Reddit (your profile's history page). Total time from landing on the site to seeing your report: **2–3 minutes.**
 
-**Why this instead of alternatives we considered:**
-- *Google Takeout export* — richest data, but takes hours to days to arrive. Kept as an optional "deep analysis" path with a guided walkthrough, not the default.
+**Hard-won lesson (v3.1):** YouTube's on-page date headers are year-less ("Jul 10") or weekday names ("Saturday"); JavaScript parses "Jul 10" as the year 2001. Naive parsing either poisons the timeline or collapses every video to "today" — which made even 120-video grabs report "not enough data". The bookmarklet now anchors year-less dates to the current year, and the site rescues any decent-sized file whose dates look corrupted (spread in order over recent weeks, flagged "dates estimated") instead of refusing it.
+
+**Other alternatives we considered:**
 - *Browser extension* — needs installation, store approval, and constant maintenance. Cut entirely for v0.
 - *Copy-paste the page* — kept as a fallback if the bookmarklet fails, but paste loses video durations and is messy across browsers.
 

@@ -37,27 +37,50 @@ void (function () {
     return (p[0] || 0) + (p[1] || 0) * 60 + (p[2] || 0) * 3600;
   }
 
-  // "Today" / "Yesterday" / "Jun 12, 2026" -> ISO date. Deterministic per run.
-  // Hardened: only text that actually LOOKS like a date is parsed. Otherwise a
-  // stray video title with a year in it (e.g. "2001: A Space Odyssey") would
-  // parse to Jan 2001 and blow the report up to "9162 days of history". Any
-  // result outside a sane window is rejected and falls back to today.
+  // "Today" / "Saturday" / "Jul 10" / "Jun 12, 2026" -> ISO date. Deterministic per run.
+  // The traps this must dodge, learned the hard way:
+  //   - Year-less labels ("Jul 10") parse to July 10, 2001 in Chrome. Trusting
+  //     new Date() either poisons the file with 2001 dates or (with a sanity
+  //     check alone) collapses EVERY video to "today" — zero days of coverage,
+  //     so even a 120-video grab came back "not enough data". We read the month
+  //     and day ourselves and anchor them to the current year.
+  //   - Bare weekday headers ("Saturday", how YouTube labels the last week)
+  //     don't parse at all — we step back to the most recent such day.
+  //   - Anything still implausible (before YouTube existed / in the future)
+  //     falls back to today rather than wrecking the timeline.
+  var MONTH_IDX = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  var DAY_IDX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+  var MIN_T = new Date('2005-02-01').getTime();
   function parseDate(label) {
     var now = new Date(RUN_NOW.getTime());
+    var maxT = RUN_NOW.getTime() + 24 * 3600 * 1000;
     if (!label) return now.toISOString();
-    var l = label.toLowerCase();
+    var l = label.toLowerCase().replace(/\s+/g, ' ').trim();
     if (l.indexOf('today') !== -1) return now.toISOString();
     if (l.indexOf('yesterday') !== -1) { now.setDate(now.getDate() - 1); return now.toISOString(); }
-    var looksDatey =
-      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(label) ||
-      /\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/.test(label);
-    if (!looksDatey) return now.toISOString();
-    var d = new Date(label);
-    if (isNaN(d.getTime())) return now.toISOString();
-    var min = new Date('2005-02-01').getTime();     // YouTube did not exist before this
-    var max = now.getTime() + 24 * 3600 * 1000;      // no "watched in the future"
-    if (d.getTime() < min || d.getTime() > max) return now.toISOString();
-    return d.toISOString();
+    var wd = l.match(/^(sun|mon|tue|wed|thu|fri|sat)[a-z]*$/);
+    if (wd) {
+      var back = (RUN_NOW.getDay() - DAY_IDX[wd[1]] + 7) % 7 || 7;
+      now.setDate(now.getDate() - back);
+      return now.toISOString();
+    }
+    var m = l.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? (\d{1,2})\b/);
+    if (!m) {
+      var m2 = l.match(/\b(\d{1,2})\.? (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/);
+      if (m2) m = [m2[0], m2[2], m2[1]];
+    }
+    if (m) {
+      var ym = l.match(/\b(20\d{2})\b/);
+      var d = new Date(ym ? +ym[1] : RUN_NOW.getFullYear(), MONTH_IDX[m[1]], +m[2], 12, 0, 0);
+      if (!ym && d.getTime() > maxT) d.setFullYear(d.getFullYear() - 1);
+      if (!isNaN(d.getTime()) && d.getTime() >= MIN_T && d.getTime() <= maxT) return d.toISOString();
+      return now.toISOString();
+    }
+    if (/\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/.test(l)) {
+      var d2 = new Date(l);
+      if (!isNaN(d2.getTime()) && d2.getTime() >= MIN_T && d2.getTime() <= maxT) return d2.toISOString();
+    }
+    return now.toISOString();
   }
 
   // ---- collect into a de-duped map, so nothing is lost even when the page
@@ -82,7 +105,15 @@ void (function () {
       if (!title) title = txt(card, '#video-title') || txt(card, 'h3') || txt(card, '[id^="video-title"]');
       if (!title) return;
       var section = a.closest('ytd-item-section-renderer');
-      var dateLabel = section ? txt(section, '#title, #header #title, .ytd-item-section-header-renderer') : '';
+      // The date is the section's header ("Today" / "Jul 10, 2026"). Try the header
+      // element first, then broader fallbacks — a missed header used to stamp every
+      // card as "today", collapsing coverage to 0 days and reading as "not enough data".
+      var dateLabel = section ? (
+        txt(section, 'ytd-item-section-header-renderer #title') ||
+        txt(section, '#header #title') ||
+        txt(section, '#title') ||
+        txt(section, '.ytd-item-section-header-renderer')
+      ) : '';
       var when = parseDate(dateLabel);
       var key = vid + '|' + when;
       if (seen.has(key)) return;
@@ -139,9 +170,17 @@ void (function () {
   //      no matter how fast you scroll past it.
   //   2. A scroll listener (capture=true also catches inner-container scrolls).
   //   3. A steady timer, as a final safety net.
+  // Day coverage shown live, so you can SEE real dates being captured — if the
+  // day count sits at 1 while you scroll past older videos, something is wrong.
+  function dayCount() {
+    var days = {};
+    seen.forEach(function (v) { days[String(v.watchedAt).slice(0, 10)] = 1; });
+    return Object.keys(days).length;
+  }
   function tick() {
     harvest();
-    label.textContent = 'Drift is watching — scroll slowly. Collected ' + seen.size + ' item' + (seen.size === 1 ? '' : 's') + '. Press Download when you reach the bottom.';
+    var d = dayCount();
+    label.textContent = 'Drift is watching — scroll slowly. Collected ' + seen.size + ' item' + (seen.size === 1 ? '' : 's') + ' across ' + d + ' day' + (d === 1 ? '' : 's') + '. Press Download when you reach the bottom.';
   }
   // The observer can fire a flood of mutations while scrolling, so throttle the
   // actual work to ~every 120ms (leading + trailing) — fast enough to catch a
@@ -184,6 +223,6 @@ void (function () {
     a.href = URL.createObjectURL(blob);
     a.download = 'drift-history-' + file.source + '.json';
     a.click();
-    alert('Drift: saved ' + items.length + ' items to your downloads. Now drop that file into the Drift site.');
+    alert('Drift: saved ' + items.length + ' items covering ' + dayCount() + ' day(s) to your downloads. Now drop that file into the Drift site.');
   });
 })();
