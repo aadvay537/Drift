@@ -62,6 +62,24 @@
     <!-- GET YOUR REPORT -->
     <section id="get" class="get">
       <h2>Get your report</h2>
+
+      <!-- Recommended: Google Takeout — complete history, exact dates, zero scrolling -->
+      <div class="card reco">
+        <div class="card-step">★</div>
+        <h3>Easiest way — no scrolling at all <span class="reco-tag">recommended</span></h3>
+        <p>Google will hand you your <strong>complete</strong> YouTube history as one file, with exact dates and times. Five clicks, no endless scrolling:</p>
+        <ol class="howto">
+          <li>Open <a href="https://takeout.google.com" target="_blank" rel="noopener"><code>takeout.google.com</code></a> (sign in with the account you watch YouTube on) and click <strong>Deselect all</strong>.</li>
+          <li>Scroll down the product list and tick <strong>YouTube and YouTube Music</strong> only.</li>
+          <li>Click the <strong>"All YouTube data included"</strong> button and keep only <strong>history</strong> ticked. Then click <strong>"Multiple formats"</strong> and switch History from HTML to <strong>JSON</strong>. This matters — Drift reads the JSON one.</li>
+          <li>Click <strong>Next step → Create export</strong>. In a few minutes Google emails you a download link (it's fast when you export only history).</li>
+          <li>Download and open the zip. Inside <code>Takeout → YouTube and YouTube Music → history</code> you'll find <strong><code>watch-history.json</code></strong> — drop that file into the box below. Done.</li>
+        </ol>
+        <p class="hint">Takeout doesn't include video lengths, so <em>Engagement drift</em> (shorter-and-more-often) can't be measured this way — <em>Narrowing</em> and <em>Escalation</em> work at full strength, on your real dates. The file is parsed in your browser and never uploaded, exactly like the bookmarklet's.</p>
+      </div>
+
+      <p class="path-or">Prefer a quick two-minute grab instead (it also captures video lengths)? Use the bookmarklet:</p>
+
       <div class="get-grid">
         <!-- Step 1: install bookmarklet -->
         <div class="card">
@@ -81,7 +99,7 @@
             <button id="copyBm" class="btn btn-ghost btn-sm">Copy bookmarklet script</button>
           </details>
           <details class="source-peek">
-            <summary>Read the full script (≈70 lines)</summary>
+            <summary>Read the full script (≈100 lines of code)</summary>
             <pre id="bmSource" class="code">loading…</pre>
           </details>
         </div>
@@ -93,11 +111,11 @@
           <ol class="howto">
             <li>Open <a href="https://www.youtube.com/feed/history" target="_blank" rel="noopener"><code>youtube.com/feed/history</code></a> (or your Reddit profile history) and make sure you're signed in.</li>
             <li>Wait a second for the first videos to appear, then click the <strong>◍ Grab my history</strong> bookmark you just made. A small bar appears at the top with a live counter and a <strong>Download my history</strong> button.</li>
-            <li><strong>Now you scroll — gently.</strong> Slowly scroll down through your history all the way to the bottom. Go softly (a small nudge at a time, not a fast fling) so every video loads and gets counted. Watch the counter climb as you go.</li>
-            <li>When you reach the bottom and the counter stops rising, click <strong>Download my history</strong>. It saves one small file to your <strong>Downloads</strong>. Now go to Step 3.</li>
+            <li><strong>Scroll down gently for a minute or two.</strong> The counter shows items <em>and days</em> collected — e.g. "120 items across 14 days". You don't need to reach the bottom: <strong>15+ videos across 10+ days</strong> is enough for a report; a few weeks of depth makes it sharper.</li>
+            <li>When the day count reaches a couple of weeks (or you've had enough scrolling), click <strong>Download my history</strong>. It saves one small file to your <strong>Downloads</strong>. Now go to Step 3.</li>
           </ol>
-          <p class="hint">Why scroll by hand? Scrolling softly yourself is what reliably loads your older history — and going gently keeps each video on screen long enough to be read. The bookmarklet never moves the page for you; it only watches and counts.</p>
-          <p class="hint">It only reads this one page: not your password, not other tabs. A long history just means a bit more scrolling — take your time, the counter shows your progress.</p>
+          <p class="hint">Watch the <strong>days</strong> number, not just items — it's the day spread that makes the early-vs-late comparison honest. If scrolling gets tedious, stop and use the no-scroll Takeout option above instead: it covers everything without any scrolling.</p>
+          <p class="hint">It only reads this one page: not your password, not other tabs.</p>
         </div>
 
         <!-- Step 3: drop the file -->
@@ -107,7 +125,7 @@
           <div id="drop" class="dropzone" tabindex="0" role="button" aria-label="Drop your history file or click to choose">
             <div class="drop-inner">
               <div class="drop-icon">⬇</div>
-              <p><strong>Drop your <code>drift-history…json</code> here</strong></p>
+              <p><strong>Drop your file here</strong> — Takeout's <code>watch-history.json</code> or the bookmarklet's <code>drift-history…json</code></p>
               <p class="drop-or">or <button id="chooseFile" class="linklike">choose a file</button></p>
             </div>
             <input id="fileInput" type="file" accept="application/json,.json" hidden />
@@ -142,7 +160,8 @@
       <h2>Privacy, in one paragraph</h2>
       <p>
         The bookmarklet runs only on the page you click it on and saves its file straight to your
-        device — it talks to no server. That file never leaves your browser. Only cleaned-up video
+        device — it talks to no server. A Google Takeout file goes from Google straight to you; Drift
+        never sees the download. Either way, that file never leaves your browser. Only cleaned-up video
         titles reach the AI service, which deletes them immediately and never trains on them. Your
         habit patterns — when and how long you watch — are computed entirely in your browser and are
         never sent. Before anything is sent, <strong>you see exactly what will be sent.</strong> All

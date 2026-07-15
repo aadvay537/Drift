@@ -1,6 +1,7 @@
 // app.js — the browser orchestrator (PRD §4). Nothing identifying leaves this file
 // except cleaned titles, and only after you approve the "what we send" preview.
 import { computeDrift, RULES_VERSION, THRESHOLDS } from './drift.js';
+import { normalizeHistoryFile, ensureUsableTimeline, parseFlexibleDate } from './normalize.js';
 
 const $ = (s) => document.querySelector(s);
 let pending = null; // { source, items, cleaned } waiting on the send-preview confirm
@@ -59,7 +60,7 @@ function readFile(file) {
   const reader = new FileReader();
   reader.onload = () => {
     try { ingest(JSON.parse(reader.result)); }
-    catch { showError('That file could not be read as a Drift history file. If the bookmarklet failed, try the paste-in fallback.'); }
+    catch { showError('That file could not be read as a history file. Drop either the bookmarklet\'s drift-history…json or Google Takeout\'s watch-history.json — or use the paste-in fallback.'); }
   };
   reader.onerror = () => showError('Could not open that file.');
   reader.readAsText(file);
@@ -71,14 +72,15 @@ function loadSample() {
 
 // ---------------------------------------------------------------------------
 // 1b. Paste-in fallback (PRD §3, §11.1) — messier, loses durations.
-// We parse titles + any date headers from the copied page text. Where dates are
-// missing we spread items evenly across a recent window PRESERVING ORDER, so the
-// early-vs-late drift comparison still works — but engagement drift (needs real
-// durations + session timing) simply won't fire, and confidence stays lower.
+// We parse titles + any date headers from the copied page text. Dates go through
+// parseFlexibleDate (normalize.js) so "Saturday" and "Jul 10" resolve to REAL
+// recent dates, not 2001 or nothing. Items still missing a date are rescued by
+// ensureUsableTimeline before the drift rules run — but engagement drift (needs
+// real durations + session timing) simply won't fire, and confidence stays lower.
 // ---------------------------------------------------------------------------
 const DUR_RE = /^\d{1,2}:\d{2}(?::\d{2})?$/;
 const NOISE_RE = /^(\d+(\.\d+)?[km]?\s*views?|watched|more actions?|shorts?|now playing|recommended|mix|live|new|cc|hd|\d+\s*(minutes?|hours?|days?|weeks?|months?|years?)\s*ago|•+|\d+)$/i;
-const DATE_HDR = /^(today|yesterday|(sun|mon|tue|wed|thu|fri|sat)[a-z]*,?\s.*\d|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(,\s*\d{4})?)$/i;
+const DATE_HDR = /^(today|yesterday|(sun|mon|tue|wed|thu|fri|sat)[a-z]*(,?\s.*\d)?|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(,\s*\d{4})?)$/i;
 
 function parsePastedHistory(text, source) {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -86,7 +88,7 @@ function parsePastedHistory(text, source) {
   let curDate = null;
   let pendingDur = 0;
   for (const line of lines) {
-    if (DATE_HDR.test(line)) { curDate = parsePasteDate(line); continue; }
+    if (DATE_HDR.test(line)) { curDate = parseFlexibleDate(line); continue; }
     if (DUR_RE.test(line)) { pendingDur = durToSec(line); continue; }
     if (NOISE_RE.test(line) || line.length < 12 || !/[a-z]/i.test(line)) { continue; }
     // Skip lone tokens (usually channel names/handles): real titles have a space or are long.
@@ -95,43 +97,32 @@ function parsePastedHistory(text, source) {
     items.push({ title: line, channel: '', durationSec: pendingDur, watchedAt: curDate });
     pendingDur = 0;
   }
-  // Fill missing dates: spread evenly over the last ~30 days, newest first (paste order).
-  const withDate = items.filter((it) => it.watchedAt);
-  if (withDate.length < items.length * 0.5) {
-    const now = Date.now(), span = 30 * 86400000;
-    items.forEach((it, i) => {
-      const frac = items.length > 1 ? i / (items.length - 1) : 0; // 0 = newest (top)
-      it.watchedAt = new Date(now - frac * span).toISOString();
-    });
-  } else {
-    items.forEach((it) => { if (!it.watchedAt) it.watchedAt = new Date().toISOString(); });
-  }
   return { source, grabbedAt: new Date().toISOString(), count: items.length, items, pasted: true };
 }
 
 function durToSec(s) { const p = s.split(':').map(Number).reverse(); return (p[0] || 0) + (p[1] || 0) * 60 + (p[2] || 0) * 3600; }
-function parsePasteDate(line) {
-  const l = line.toLowerCase();
-  if (l.includes('today')) return new Date().toISOString();
-  if (l.includes('yesterday')) { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString(); }
-  const d = new Date(line); return isNaN(d.getTime()) ? null : d.toISOString();
-}
 
 function analyzePaste() {
   const text = $('#pasteArea').value.trim();
   const source = $('#pasteSource').value;
   if (text.length < 40) return showError('Paste a bit more of your history page first — a few dozen lines works best.');
-  const file = parsePastedHistory(text, source);
-  if (file.items.length < 5) return showError('We could only find a few titles in that paste. Try selecting the whole history list (Ctrl/Cmd+A) and copying again.');
-  ingest(file);
+  ingest(parsePastedHistory(text, source));
 }
 
 // ---------------------------------------------------------------------------
 // 2. Clean in-browser, then show the "what we send" preview (PRD §4.2, §7)
 // ---------------------------------------------------------------------------
-function ingest(file) {
+function ingest(raw) {
+  // Accept every shape we know: the bookmarklet's file, a pasted-text parse,
+  // the sample file, or Google Takeout's watch-history.json.
+  const file = normalizeHistoryFile(raw) || raw;
   const items = (file?.items || []).filter((it) => it && it.title);
-  if (!items.length) return showError('That file has no history items in it.');
+  if (!items.length) {
+    return showError('No history items found in that. Drop the bookmarklet\'s drift-history…json or Google Takeout\'s watch-history.json (JSON format — see the no-scroll option above).');
+  }
+  if (items.length < 15) {
+    return showError(`We found only ${items.length} video${items.length === 1 ? '' : 's'} — the drift rules need at least 15 to say anything honest. The easiest fix: use the Google Takeout option (no scrolling, your complete history), or scroll a little further before downloading.`);
+  }
 
   // Cleaning: strip handles/@mentions from titles; drop channel names entirely
   // (they're only used locally, never sent). Titles get a stable id.
@@ -140,7 +131,7 @@ function ingest(file) {
     title: scrubTitle(it.title),
   }));
 
-  pending = { source: file.source || 'youtube', items, cleaned };
+  pending = { source: file.source || 'youtube', items, cleaned, meta: file };
   openSendPreview(pending);
 }
 
@@ -154,10 +145,13 @@ function scrubTitle(title) {
     .slice(0, 300);
 }
 
-function openSendPreview({ items, cleaned }) {
+function openSendPreview({ cleaned, meta }) {
   const sample = cleaned.slice(0, 8).map((c) => '• ' + c.title).join('\n');
+  const truncated = meta?.takeout && meta.totalCount > cleaned.length
+    ? `\n\n(Your Takeout file holds ${meta.totalCount} watches — we analyse the newest ${cleaned.length}.)`
+    : '';
   $('#sendPreview').textContent =
-    sample + (cleaned.length > 8 ? `\n… and ${cleaned.length - 8} more cleaned titles` : '');
+    sample + (cleaned.length > 8 ? `\n… and ${cleaned.length - 8} more cleaned titles` : '') + truncated;
   $('#sendStats').innerHTML = `
     <div class="stat"><b>${cleaned.length}</b><span>titles sent (labels only)</span></div>
     <div class="stat"><b>0</b><span>channels / handles sent</span></div>
@@ -193,7 +187,13 @@ async function analyze({ source, items, cleaned }) {
 
     // 3c. Drift type from fixed rules — runs right here in your browser.
     step('Applying the published drift rules (in your browser)…');
-    const drift = computeDrift(labeled);
+    const prepared = ensureUsableTimeline(labeled);
+    const drift = computeDrift(prepared.items);
+    if (prepared.estimated && drift.type !== 'insufficient') {
+      // Timing was reconstructed, not measured — say so and never claim high confidence.
+      drift.estimatedDates = true;
+      if (drift.confidence === 'high') drift.confidence = 'medium';
+    }
 
     // 3d. Report writer + tone checker. We send only the small drift summary.
     step('Writing your report and tone-checking it…');
@@ -247,6 +247,7 @@ function renderReport(drift, report, source) {
         <span class="badge type">${escapeHtml(type)}</span>
         ${isReal ? `<span class="badge ${confClass}">${drift.confidence} confidence</span>` : ''}
         <span class="badge">${drift.coverageDays || 0} days of history</span>
+        ${drift.estimatedDates ? '<span class="badge">dates estimated</span>' : ''}
         <span class="badge">${escapeHtml(source)}</span>
       </div>
       <h2 class="headline">${escapeHtml(report.headline)}</h2>
