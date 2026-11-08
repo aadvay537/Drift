@@ -13,7 +13,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const DATABASE_URL = process.env.DATABASE_URL || '';
+// Accept the connection string exactly as Neon shows it; drop URL options the
+// Postgres driver doesn't need (SSL is configured below).
+function cleanUrl(u) {
+  if (!u) return '';
+  try { const x = new URL(u.trim()); ['channel_binding', 'sslmode'].forEach((k) => x.searchParams.delete(k)); return x.toString(); }
+  catch { return u.trim(); }
+}
+const DATABASE_URL = cleanUrl(process.env.DATABASE_URL || '');
 const FILE = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'contributions.json');
 
 let pool = null;
