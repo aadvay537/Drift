@@ -184,16 +184,18 @@
   <button id="chatFab" class="chat-fab" aria-label="Ask Drift a question" aria-expanded="false" type="button">Ask Drift</button>
   <section id="chatWidget" class="chat-widget hidden" role="dialog" aria-label="Drift assistant">
     <header class="cw-head">
-      <span>Drift assistant</span>
-      <button id="chatClose" class="cw-close" aria-label="Close" type="button">✕</button>
+      <span class="cw-title"><span class="cw-dot"></span>Ask Drift</span>
+      <span class="cw-tools">
+        <button id="chatNew" class="cw-btn" type="button" aria-label="Start a new chat" title="New chat"><svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button>
+        <button id="chatExpand" class="cw-btn" type="button" aria-label="Make bigger" title="Bigger"><svg viewBox="0 0 20 20"><path d="M12 3h5v5M8 17H3v-5M17 3l-6 6M3 17l6-6"/></svg></button>
+        <button id="chatClose" class="cw-btn" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+      </span>
     </header>
-    <div class="cw-log" id="cwLog" aria-live="polite">
-      <div class="msg assistant">Ask me how Drift works, what the drift types mean, or what happens to your data.</div>
-    </div>
+    <div class="cw-log" id="cwLog" aria-live="polite"></div>
     <div class="cw-suggest" id="cwSuggest"></div>
     <form class="cw-form" id="cwForm" autocomplete="off">
-      <input id="cwInput" type="text" placeholder="Ask a question" aria-label="Your question" maxlength="500" />
-      <button class="btn btn-lantern btn-sm" type="submit">Ask</button>
+      <textarea id="cwInput" rows="1" placeholder="Ask anything…" aria-label="Your question" maxlength="2000"></textarea>
+      <button class="cw-send" type="submit" aria-label="Send"><svg viewBox="0 0 20 20"><path d="M4 10h11M10 4l6 6-6 6"/></svg></button>
     </form>
   </section>
 

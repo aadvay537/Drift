@@ -216,63 +216,75 @@ const DRIFT_KB = [
 ].join('\n');
 
 const CHAT_SYSTEM =
-  "You are Drift's assistant — a calm, friendly guide for a media-literacy tool. Help the reader understand Drift " +
-  'and (if they have run one) their own result, and answer general questions about how recommendation feeds and media ' +
-  'literacy work. Actually resolve the doubt: be specific and use the facts below; if they ask "how", walk through the ' +
-  'relevant step plainly. Tone rules you MUST obey (a mirror, not a filter): no scare words; never claim the algorithm ' +
-  'CAUSED anyone\'s behaviour (patterns, not proof); never compare the reader to other people; never diagnose; no guilt, ' +
-  'scores, or streaks; never ask how they feel emotionally. Keep answers warm, plain, and fairly short — usually 2-5 ' +
-  'sentences, a little more only when the question truly needs it. Never invent numbers. If a report is provided, ground ' +
-  "any claim about THEIR data in it; if something isn't in the data (why it happened, what happens next, who they are), " +
-  'say plainly that Drift only shows patterns in what they already watched. If a question is unrelated to Drift or media ' +
-  'literacy, answer briefly and gently steer back.\n\n' + DRIFT_KB;
+  "You are Drift's assistant, built into a media-literacy website. You are a genuinely capable, knowledgeable " +
+  'assistant: answer ANY question the person asks fully and directly — about Drift, their own results, how social ' +
+  'media and recommendation algorithms work, screen time, studying, habits, or anything else at all (general ' +
+  'knowledge, maths, writing help, advice). Never refuse a reasonable question just because it is off-topic, and never ' +
+  'tell them to "steer back". Be specific and practical; give real explanations, examples and steps.\n\n' +
+  'FORMAT: Use light Markdown when it helps — short paragraphs, **bold** for key terms, and "-" bullet lists or ' +
+  '"1." numbered steps. No headings, no tables. Match length to the question: a quick fact gets a sentence or two; ' +
+  '"how" or "help me plan" questions get a fuller answer.\n\n' +
+  "WHEN TALKING ABOUT THE PERSON'S OWN DATA OR RESULT (Drift's \"mirror, not a filter\" promise): ground every " +
+  'claim in the report and the on-device statistics provided below and never invent numbers; describe patterns, not ' +
+  'proof — never claim an algorithm CAUSED their behaviour; never compare them to other people; never diagnose them ' +
+  'or label them (e.g. never call them addicted); no guilt-tripping. Discussing these topics in general (for example, ' +
+  'why short videos are designed to be compelling) is completely fine — just be balanced and accurate. If they ask ' +
+  "something their data can't show (why it happened, who they are), say plainly that Drift only sees patterns in what " +
+  'they watched.\n\n' + DRIFT_KB;
+
+// The small, aggregate, non-identifying statistics the browser may share so the
+// assistant can answer data questions: weekly totals, topic shares, hour-of-day
+// shares, creator concentration as percentages. No titles, names or timestamps.
+function contextBlock(drift, report, stats) {
+  if (!(drift && report)) {
+    return '\n\nThe person has NOT run an analysis yet, so you have no data for them. Answer generally; where it ' +
+      'genuinely helps, mention they can try Drift (the "Try it with sample data" button shows a full example).';
+  }
+  return "\n\nTHE PERSON'S CURRENT REPORT:\n" + JSON.stringify({ drift: driftFacts(drift), report }) +
+    (stats ? '\n\nON-DEVICE STATISTICS (aggregates computed in their browser):\n' + JSON.stringify(stats) : '');
+}
+
+function chatMessages(history, q) {
+  return [
+    ...history
+      .filter((m) => m && typeof m.content === 'string' && m.content.trim())
+      .slice(-12)
+      .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 4000) })),
+    { role: 'user', content: q },
+  ];
+}
 
 /**
- * Answer one question. Both drift and report are OPTIONAL — when absent the
- * assistant answers generally (the reader hasn't analysed anything yet).
+ * Answer one question, streaming text as it is written.
+ * drift/report/stats are OPTIONAL — before an analysis it answers generally.
  * @param {object} p
- * @param {object|null} p.drift    the (already-shared) drift summary, or null
- * @param {object|null} p.report   the written report {headline,driving,changed,tryThis}, or null
- * @param {{role:string,content:string}[]} p.history  prior completed turns (user/assistant pairs)
- * @param {string} p.question the new question
+ * @param {(chunk:string)=>void} [onText]  called with each piece of text as it arrives
  * @returns {Promise<{answer:string, source:string}>}
  */
-export async function chatAboutDrift({ drift, report, history = [], question }) {
+export async function chatAboutDrift({ drift, report, stats = null, history = [], question }, onText = () => {}) {
   const q = String(question || '').trim();
-  if (!q) return { answer: 'Ask me anything about Drift or your report.', source: hasKey ? 'live' : 'mock' };
-  if (!hasKey) return { answer: mockChat(drift, report, q), source: 'mock' };
+  if (!q) { const a = 'Ask me anything — about Drift, your report, or anything else.'; onText(a); return { answer: a, source: 'mock' }; }
+  if (!hasKey) { const a = mockChat(drift, report, q); onText(a); return { answer: a, source: 'mock' }; }
 
+  let text = '';
   try {
-    const context = drift && report
-      ? "\n\nTHE READER'S CURRENT REPORT (ground any claim about their data in this, and nothing else):\n" +
-        JSON.stringify({ drift: driftFacts(drift), report }, null, 0)
-      : '\n\nThe reader has NOT run an analysis yet, so you have no report for them — answer generally, and where it helps, ' +
-        'invite them to try it (the "Try with sample data" button shows a full example in seconds).';
-    const messages = [
-      ...history
-        .filter((m) => m && typeof m.content === 'string' && m.content.trim())
-        .slice(-8)
-        .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 1000) })),
-      { role: 'user', content: q },
-    ];
-    const msg = await client.messages.create({
+    const stream = client.messages.stream({
       model: MODEL,
-      max_tokens: 900, // headroom for a thinking block + a few-sentence answer
-      system: CHAT_SYSTEM + context,
-      messages,
+      max_tokens: 1800,
+      system: CHAT_SYSTEM + contextBlock(drift, report, stats),
+      messages: chatMessages(history, q),
     });
-    const text = msg.content.map((c) => (c.type === 'text' ? c.text : '')).join('').trim();
-    const lower = text.toLowerCase();
-    // Reuse the report's tone guard: a scare/causal/comparison phrase → safe fallback.
-    if (!text || BANNED.some((w) => lower.includes(w))) {
-      return { answer: mockChat(drift, report, q), source: 'fallback' };
-    }
+    stream.on('text', (t) => { text += t; onText(t); });
+    await stream.finalMessage();
     noteOk();
-    return { answer: text, source: 'ai' };
+    return { answer: text.trim(), source: 'ai' };
   } catch (err) {
     noteFail(err);
-    console.warn('[agent] chat fell back to mock:', err.message);
-    return { answer: mockChat(drift, report, q), source: 'mock' };
+    console.warn('[agent] chat error:', err.message);
+    if (text) return { answer: text.trim(), source: 'ai-partial' };
+    const a = mockChat(drift, report, q);
+    onText(a);
+    return { answer: a, source: 'mock' };
   }
 }
 

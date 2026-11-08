@@ -58,7 +58,7 @@ function rateLimit({ windowMs, max, name }) {
 }
 const limitLabel = rateLimit({ windowMs: 10 * 60 * 1000, max: 8, name: 'analysis' });
 const limitReport = rateLimit({ windowMs: 10 * 60 * 1000, max: 12, name: 'report' });
-const limitChat = rateLimit({ windowMs: 60 * 1000, max: 12, name: 'chat' });
+const limitChat = rateLimit({ windowMs: 60 * 1000, max: 15, name: 'chat' });
 // no-store: the browser must re-fetch app.js/normalize.js/bookmarklet source on
 // every load. A cached stale app.js once made a fixed bug look unfixed for a
 // whole day — these files are tiny, so freshness beats caching here.
@@ -132,42 +132,68 @@ app.post('/api/report', limitReport, async (req, res) => {
   }
 });
 
-// 3. Chat. The always-on assistant. drift + report are OPTIONAL — before an
-// analysis it answers general questions; after one it also gets that reader's
-// summary. Same privacy envelope: only the drift summary + the already-written
-// report + the reader's own questions. No raw titles or habit data are accepted.
+// 3. Chat. The assistant answers anything; it streams its answer as NDJSON lines:
+//   {"t":"…text…"}  repeated, then  {"done":true,"source":"ai"}
+// drift + report + stats are OPTIONAL. stats are small aggregates computed in the
+// browser (weekly totals, topic shares, hour shares, creator-share percentages) —
+// never titles, names or timestamps — and are reshaped here so nothing else gets in.
+function shapeStats(st) {
+  if (!st || typeof st !== 'object') return null;
+  const num = (x) => (Number.isFinite(Number(x)) ? Math.round(Number(x) * 1000) / 1000 : null);
+  const str = (x, n = 40) => String(x ?? '').slice(0, n);
+  return {
+    platform: str(st.platform, 20),
+    totalItems: num(st.totalItems),
+    weeks: Array.isArray(st.weeks) ? st.weeks.slice(0, 60).map((w) => ({
+      week: str(w.week, 20), items: num(w.items), sessions: num(w.sessions), intensity: num(w.intensity), topTopic: str(w.topTopic, 30),
+    })) : [],
+    topicShift: Array.isArray(st.topicShift) ? st.topicShift.slice(0, 10).map((t) => ({ topic: str(t.topic, 30), earlyShare: num(t.earlyShare), recentShare: num(t.recentShare) })) : [],
+    hourShareRecent: Array.isArray(st.hourShareRecent) ? st.hourShareRecent.slice(0, 24).map(num) : [],
+    hourShareEarlier: Array.isArray(st.hourShareEarlier) ? st.hourShareEarlier.slice(0, 24).map(num) : [],
+    lateNightShare: num(st.lateNightShare),
+    top3CreatorShare: st.top3CreatorShare ? { earlier: num(st.top3CreatorShare.earlier), recent: num(st.top3CreatorShare.recent) } : null,
+    instagramInterests: Array.isArray(st.instagramInterests) ? st.instagramInterests.slice(0, 30).map((x) => str(x, 40)) : [],
+  };
+}
+
 app.post('/api/chat', limitChat, async (req, res) => {
+  const b = req.body || {};
+  const question = typeof b.question === 'string' ? b.question.slice(0, 2000) : '';
+  if (!question.trim()) return res.status(400).json({ error: 'empty question' });
+
+  const d = b.drift;
+  const drift = d && typeof d.type === 'string' ? shapeDrift(d) : null;
+  const r = b.report;
+  const report = drift && r && typeof r === 'object'
+    ? {
+        headline: String(r.headline || '').slice(0, 400),
+        driving: String(r.driving || '').slice(0, 400),
+        changed: String(r.changed || '').slice(0, 800),
+        tryThis: String(r.tryThis || '').slice(0, 400),
+      }
+    : null;
+  const stats = drift ? shapeStats(b.stats) : null;
+  const history = Array.isArray(b.history)
+    ? b.history
+        .filter((m) => m && typeof m.content === 'string')
+        .slice(-12)
+        .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 4000) }))
+    : [];
+
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+  let closed = false;
+  res.on('close', () => { closed = true; });
   try {
-    const b = req.body || {};
-    const question = typeof b.question === 'string' ? b.question.slice(0, 500) : '';
-    if (!question.trim()) return res.status(400).json({ error: 'empty question' });
-
-    const d = b.drift;
-    const drift = d && typeof d.type === 'string' ? shapeDrift(d) : null;
-
-    const r = b.report;
-    // A report only counts if there's a drift result to anchor it to.
-    const report = drift && r && typeof r === 'object'
-      ? {
-          headline: String(r.headline || '').slice(0, 400),
-          driving: String(r.driving || '').slice(0, 400),
-          changed: String(r.changed || '').slice(0, 600),
-          tryThis: String(r.tryThis || '').slice(0, 400),
-        }
-      : null;
-
-    const history = Array.isArray(b.history)
-      ? b.history
-          .filter((m) => m && typeof m.content === 'string')
-          .slice(-8)
-          .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 1000) }))
-      : [];
-
-    const result = await chatAboutDrift({ drift, report, history, question });
-    res.json({ ...result, mode: agentMode });
+    const result = await chatAboutDrift({ drift, report, stats, history, question }, (t) => {
+      if (!closed) res.write(JSON.stringify({ t }) + '\n');
+    });
+    if (!closed) res.end(JSON.stringify({ done: true, source: result.source }) + '\n');
   } catch (err) {
     console.error('[/api/chat]', err);
-    res.status(500).json({ error: 'chat failed' });
+    if (!closed) res.end(JSON.stringify({ error: 'chat failed' }) + '\n');
   }
 });
 
