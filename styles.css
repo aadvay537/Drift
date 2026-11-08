@@ -84,6 +84,8 @@ p { margin: 0; }
 .mode::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--mist); }
 .mode.live::before { background: var(--kelp); box-shadow: 0 0 10px var(--kelp); }
 .mode.degraded::before { background: var(--coral); }
+.mode.waking::before { background: var(--lantern); animation: blink 1.2s infinite; }
+.wake-note { font-size: 13px; color: var(--mist); margin-left: 6px; }
 @media (max-width: 760px) { .nav-links { display: none; } .mode { visibility: hidden; } }
 
 /* ---------- hero ---------- */
