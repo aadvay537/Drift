@@ -698,24 +698,35 @@ function md(src) {
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  const out = [];
-  let list = null;
+  // Two levels of lists: indented bullets under a numbered or bulleted item nest inside it.
+  let html = '', top = null, sub = false, liOpen = false;
+  const closeSub = () => { if (sub) { html += '</ul>'; sub = false; } };
+  const closeLi = () => { closeSub(); if (liOpen) { html += '</li>'; liOpen = false; } };
+  const closeTop = () => { closeLi(); if (top) { html += `</${top}>`; top = null; } };
   for (const raw of String(src).split('\n')) {
-    const line = raw.trimEnd();
-    const ul = line.match(/^\s*[-*•]\s+(.*)/), ol = line.match(/^\s*\d+[.)]\s+(.*)/);
-    if (ul || ol) {
-      const tag = ul ? 'ul' : 'ol';
-      if (!list || list.tag !== tag) { if (list) out.push(`</${list.tag}>`); out.push(`<${tag}>`); list = { tag }; }
-      out.push(`<li>${inline((ul || ol)[1])}</li>`);
+    const line = raw.replace(/\s+$/, '');
+    const m = line.match(/^(\s*)([-*•]|\d+[.)])\s+(.*)/);
+    if (m) {
+      const indented = m[1].length >= 2;
+      const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+      if (indented && liOpen) {
+        if (!sub) { html += '<ul>'; sub = true; }
+        html += `<li>${inline(m[3])}</li>`;
+        continue;
+      }
+      if (top !== tag) { closeTop(); html += `<${tag}>`; top = tag; } else closeLi();
+      html += `<li>${inline(m[3])}`; liOpen = true;
       continue;
     }
-    if (list) { out.push(`</${list.tag}>`); list = null; }
-    if (!line.trim()) continue;
-    out.push(`<p>${inline(line.replace(/^#+\s*/, ''))}</p>`);
+    if (!line.trim()) { closeSub(); continue; }
+    if (top && /^\s{2,}\S/.test(line) && liOpen) { html += ' ' + inline(line.trim()); continue; }
+    closeTop();
+    html += `<p>${inline(line.replace(/^#+\s*/, ''))}</p>`;
   }
-  if (list) out.push(`</${list.tag}>`);
-  return out.join('');
+  closeTop();
+  return html;
 }
+
 
 // Floating assistant: ask anything, anywhere on the page.
 const GENERAL_SUGGEST = ['How does Drift work?', 'How do YouTube recommendations actually work?', 'How do I get my Instagram data?', 'Help me plan a week with less scrolling'];
