@@ -1,13 +1,14 @@
 {
   "name": "drift",
   "version": "4.0.0",
-  "description": "Drift — see what algorithmic influence you've been under, in about two minutes.",
+  "description": "Drift \u2014 see what algorithmic influence you've been under, in about two minutes.",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test/drift.test.js"
+    "test": "node test/drift.test.js",
+    "deploy:pages": "git subtree split --prefix public -b gh-pages-tmp && git push -f origin gh-pages-tmp:gh-pages && git branch -D gh-pages-tmp"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

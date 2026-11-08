@@ -32,6 +32,25 @@ app.use((_req, res, next) => {
   next();
 });
 
+// CORS: the website itself is served from GitHub Pages (instant, never sleeps)
+// and calls this server for the AI parts. Only Drift's own sites may call it.
+const ALLOWED_ORIGINS = new Set([
+  'https://aadvay537.github.io',
+  ...(process.env.DRIFT_ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+]);
+app.use('/api', (req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // ---------------------------------------------------------------------------
 // Rate limits. The AI endpoints spend real money on the site owner's API key,
 // so each visitor gets a fair allowance per window. In-memory sliding window,

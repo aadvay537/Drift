@@ -3,6 +3,7 @@
 import { computeDrift, RULES_VERSION } from './drift.js';
 import { ensureUsableTimeline, parseFlexibleDate, cleanItems, normalizeHistoryFile } from './normalize.js';
 import { readHistoryFile } from './platforms.js';
+import { keywordLabel } from './labeler.js';
 import { weeklyTimeline, turningPoint, creatorConcentration, hourProfile, topicShift, askLocal, topicName } from './insights.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -23,14 +24,53 @@ const state = {
 $('#rulesV').textContent = RULES_VERSION;
 
 // ---------------------------------------------------------------------------
-// Status badge — live AI, demo engine, or live-but-failing.
+// The AI server. The page itself is served from GitHub Pages (instant); the AI
+// lives on Render, which sleeps when idle. We start waking it the moment you
+// arrive, so it's usually ready by the time you've found your history file.
 // ---------------------------------------------------------------------------
-fetch('/api/status').then((r) => r.json()).then((s) => {
+const API = /github\.io$/.test(location.hostname) || location.protocol === 'file:' ? 'https://drift-aatp.onrender.com' : '';
+const server = { up: false, live: false, waiters: [] };
+
+function setBadge(kind, text) {
   const b = $('#modeBadge');
-  if (s.mode === 'live' && s.health !== 'failing') { b.textContent = 'Live AI'; b.classList.add('live'); }
-  else if (s.mode === 'live') { b.textContent = 'AI unavailable — using backup'; b.classList.add('degraded'); }
-  else b.textContent = 'Demo engine';
-}).catch(() => {});
+  b.className = 'mode ' + kind;
+  b.textContent = text;
+}
+async function wakeServer() {
+  setBadge('waking', 'Waking the AI…');
+  const t0 = Date.now();
+  while (Date.now() - t0 < 6 * 60 * 1000) {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 20000);
+      const r = await fetch(API + '/api/status', { signal: ctl.signal, cache: 'no-store' });
+      clearTimeout(timer);
+      if (r.ok) {
+        const st = await r.json();
+        server.up = true;
+        server.live = st.mode === 'live' && st.health !== 'failing';
+        if (server.live) setBadge('live', 'Live AI');
+        else if (st.mode === 'live') setBadge('degraded', 'AI unavailable — using backup');
+        else setBadge('', 'Demo engine');
+        server.waiters.splice(0).forEach((fn) => fn(true));
+        return;
+      }
+    } catch { /* still asleep — keep trying */ }
+    await new Promise((res) => setTimeout(res, 4000));
+  }
+  setBadge('degraded', 'AI offline — using backup');
+  server.waiters.splice(0).forEach((fn) => fn(false));
+}
+// Resolve true once the server answers, or false after `ms`.
+function waitForServer(ms) {
+  if (server.up) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const done = (ok) => { clearTimeout(t); resolve(ok); };
+    const t = setTimeout(() => { server.waiters.splice(server.waiters.indexOf(done) >>> 0, 1); resolve(false); }, ms);
+    server.waiters.push(done);
+  });
+}
+wakeServer();
 
 // Nav goes solid once you leave the hero.
 const nav = $('#nav');
@@ -350,10 +390,18 @@ async function analyze({ file, items, cleaned }) {
   try {
     next();
     let labeled;
+    let usedBackup = false;
     if (file.hasTitles) {
       next();
-      const res = await postJSON('/api/label', { items: cleaned });
-      const byId = new Map((res.labels || []).map((l) => [l.id, l]));
+      // Give a sleeping AI server up to ~40s to wake; otherwise use the
+      // in-browser backup engine so you're never stuck waiting.
+      let labels = null;
+      if (!server.up) { const li = $('.run-steps li.now'); if (li) li.textContent = 'Waking the AI (first visit only) — a backup engine takes over if it\'s slow'; }
+      if (server.up || await waitForServer(25000)) {
+        try { labels = (await postJSON('/api/label', { items: cleaned })).labels; } catch (e) { if (e.status === 429) throw e; }
+      }
+      if (!labels) { usedBackup = true; labels = cleaned.map(keywordLabel); }
+      const byId = new Map((labels || []).map((l) => [l.id, l]));
       labeled = items.map((it, i) => {
         const l = byId.get('v' + i) || {};
         return { title: it.title, channel: it.channel || '', topic: l.topic || 'other', intensity: typeof l.intensity === 'number' ? l.intensity : 0.35, durationSec: Number(it.durationSec) || 0, watchedAt: it.watchedAt };
@@ -378,7 +426,7 @@ async function analyze({ file, items, cleaned }) {
 
     next();
     let report;
-    if (file.hasTitles) {
+    if (file.hasTitles && !usedBackup && server.up) {
       try { report = (await postJSON('/api/report', { drift })).report; } catch { report = null; }
     }
     if (!file.hasTitles || !report) report = localReport(drift, file, extras, report);
@@ -421,6 +469,7 @@ function rhythmDrift(drift, weeks, creators, platform) {
 
 function localReport(drift, file, extras, aiReport) {
   if (aiReport && file.hasTitles) return aiReport;
+  if (file.hasTitles) return browserReport(drift);
   const name = file.platform === 'tiktok' ? 'TikTok' : 'Instagram';
   if (drift.type === 'insufficient') {
     return { headline: 'Not enough history yet to say anything honest.', driving: `This file covers about ${drift.coverageDays} days. Drift needs at least 10.`, changed: 'Request a longer date range from your app and try again.', tryThis: 'Or try the sample to see what a full report looks like.', toneChecked: true, source: 'insufficient' };
@@ -437,8 +486,36 @@ function localReport(drift, file, extras, aiReport) {
   };
 }
 
+// Written on your device when the AI server isn't reachable. Same calm rules.
+function browserReport(drift) {
+  if (drift.type === 'insufficient') {
+    return { headline: 'Not enough history yet to say anything honest.', driving: `This file covers ${drift.itemCount || 0} items over about ${drift.coverageDays || 0} days. Drift needs at least 15 items across 10 days.`, changed: 'Google Takeout gives you your complete history with no scrolling.', tryThis: 'Or try the sample to see what a full report looks like.', toneChecked: true, source: 'browser' };
+  }
+  const clusters = (drift.topClusters || []).filter((t) => t !== 'other').map((t) => topicName(t).toLowerCase());
+  const since = drift.startDate ? ` since ${drift.startDate}` : '';
+  const head = {
+    escalation: `What you watch became about ${drift.percent}% more emotionally charged over ${drift.weeks} weeks${since}.`,
+    narrowing: `Your topics narrowed by about ${drift.percent}% over ${drift.weeks} weeks${since}.`,
+    engagement: `Your videos got about ${drift.percent}% shorter while you watched more often, over ${drift.weeks} weeks${since}.`,
+    mixed: `Your watching shifted over ${drift.weeks} weeks${since}, but no single pattern stands out.`,
+  }[drift.type] || `Your watching shifted over ${drift.weeks} weeks${since}.`;
+  const tries = {
+    escalation: 'Try one day without news or drama content and see if your focus feels different.',
+    narrowing: 'Try one video from a topic you used to enjoy but drifted away from.',
+    engagement: 'Try picking one longer video and watching it start to finish.',
+    mixed: 'Pick one thing to watch on purpose this week, and notice how it compares with the autoplay picks.',
+  };
+  return {
+    headline: head,
+    driving: clusters.length ? `Most of the change sits in ${clusters.join(', ')}.` : 'The change is spread across several topics.',
+    changed: (drift.habitChanges?.length ? drift.habitChanges.join(' ') + ' ' : '') + 'Is this how you want your week to look?',
+    tryThis: tries[drift.type] || tries.mixed,
+    toneChecked: true, source: 'browser',
+  };
+}
+
 async function postJSON(url, body) {
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(API + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!r.ok) { const e = new Error(await r.text()); e.status = r.status; throw e; }
   return r.json();
 }
@@ -453,7 +530,7 @@ function renderReport() {
   const { drift, report, weeks, file, extras } = state.analysis;
   const real = drift.type !== 'insufficient';
   const prev = loadRuns().filter((r) => r.platform === (file.platform || 'youtube')).at(-1);
-  const sourceTag = { ai: 'Written by AI, tone-checked', fallback: 'Plain pre-written report', mock: 'Demo report', local: 'Written on your device', insufficient: '' }[report.source] || '';
+  const sourceTag = { ai: 'Written by AI, tone-checked', fallback: 'Plain pre-written report', mock: 'Demo report', local: 'Written on your device', browser: 'Written on your device by the backup engine (the AI server was asleep)', insufficient: '' }[report.source] || '';
 
   const tiles = [];
   if (real && weeks.length > 1) tiles.push(`<div class="tile wide"><h4>Week by week</h4><p class="sub">${file.hasTitles ? 'How much you watched, split by topic. The line is how emotionally charged it was.' : 'How much you watched each week. The line is how many separate sessions.'}</p>${timelineSvg(weeks, file.hasTitles, extras.turn)}</div>`);
@@ -621,7 +698,12 @@ async function ask(question, logSel, { fromChip = false } = {}) {
   setBusy(logSel, true);
   let text = '';
   try {
-    const r = await fetch('/api/chat', {
+    if (!server.up) {
+      bubble.innerHTML = '<span class="dots"><i></i><i></i><i></i></span> <span class="wake-note">Waking the AI — first visit takes up to a minute</span>';
+      if (!(await waitForServer(150000))) { const e = new Error('asleep'); e.status = 503; throw e; }
+      bubble.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
+    }
+    const r = await fetch(API + '/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ drift: a?.drift || null, report: a?.report || null, stats: a ? chatStats(a) : null, history: chats[logSel].slice(-12), question: q }),
     });
@@ -648,7 +730,7 @@ async function ask(question, logSel, { fromChip = false } = {}) {
     chats[logSel].push({ role: 'user', content: q }, { role: 'assistant', content: text });
   } catch (err) {
     bubble.classList.remove('typing');
-    if (!text) bubble.textContent = err.status === 429 ? 'That\'s a lot of questions in a minute. Wait a moment and ask again.' : 'The assistant couldn\'t be reached just now. Check your connection and try again.';
+    if (!text) bubble.textContent = err.status === 503 ? 'The AI server is still starting up. Try again in a minute.' : err.status === 429 ? 'That\'s a lot of questions in a minute. Wait a moment and ask again.' : 'The assistant couldn\'t be reached just now. Check your connection and try again.';
   } finally { setBusy(logSel, false); }
 }
 

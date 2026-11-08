@@ -1,0 +1,12 @@
+# Keeps the free Render AI server from falling asleep, so answers come fast.
+# Render's free plan sleeps after 15 idle minutes; this pings every 10.
+name: Keep AI server awake
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 120 https://drift-aatp.onrender.com/api/status || true

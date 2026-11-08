@@ -85,3 +85,9 @@ node scripts/gen-sample.js   # regenerate public/sample-data.json
 Your raw file, channel names, handles, and every timestamp stay in your browser. Only cleaned titles
 reach the AI (to be labelled, then deleted). Your habit patterns are computed entirely client-side and
 never sent. All code — including the bookmarklet's full script — is right here to read.
+
+## Hosting
+
+- **Website:** GitHub Pages, served from the `gh-pages` branch (a copy of `public/`) → https://aadvay537.github.io/Drift/ — loads instantly, never sleeps.
+- **AI server:** Render (`server.js`) → https://drift-aatp.onrender.com. The page wakes it on arrival; if it's slow, a backup engine in the browser finishes the report. A GitHub Action pings it every 10 minutes to keep it awake.
+- To publish website changes: `npm run deploy:pages` (pushes `public/` to `gh-pages`). Server changes still need a Render deploy.
