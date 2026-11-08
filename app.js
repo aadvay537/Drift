@@ -385,7 +385,7 @@ async function analyze({ file, items, cleaned }) {
     next();
 
     state.analysis = { drift, report, items: prepared.items, weeks, file, extras };
-    state.chat = [];
+    chats['#askLog'] = [];
     renderReport();
   } catch (err) {
     console.error(err);
@@ -598,57 +598,149 @@ function askPanel() {
 function wireAsk() {
   const qs = state.analysis.file.hasTitles ? [...LOCAL_SUGGEST, ...AI_SUGGEST] : ['Who do I watch most?', 'What was my busiest week?', 'What did I watch late at night?', ...AI_SUGGEST];
   $('#askSuggest').innerHTML = qs.map((q) => `<button type="button">${esc(q)}</button>`).join('');
-  $$('#askSuggest button').forEach((b) => b.addEventListener('click', () => ask(b.textContent, '#askLog')));
+  $$('#askSuggest button').forEach((b) => b.addEventListener('click', () => ask(b.textContent, '#askLog', { fromChip: LOCAL_SUGGEST.includes(b.textContent) })));
   $('#askForm').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#askInput').value; $('#askInput').value = ''; ask(v, '#askLog'); });
 }
 
-async function ask(question, logSel) {
+// Each chat box keeps its own conversation, so follow-up questions make sense.
+const chats = { '#askLog': [], '#cwLog': [] };
+
+async function ask(question, logSel, { fromChip = false } = {}) {
   const q = String(question || '').trim();
   if (!q) return;
   addMsg(logSel, 'user', q);
   const a = state.analysis;
-  if (a) {
+  // Suggested questions about your own history are answered right here, on
+  // this device (they can quote your titles, which never leave the browser).
+  if (a && fromChip) {
     const local = askLocal(q, { items: a.items, weeks: a.weeks, drift: a.drift });
-    if (local) { addMsg(logSel, 'assistant', local, 'Answered on your device'); return; }
+    if (local) { addMsg(logSel, 'assistant', local, 'Answered on your device'); chats[logSel].push({ role: 'user', content: q }, { role: 'assistant', content: local }); return; }
   }
-  const typing = addMsg(logSel, 'assistant', 'Thinking…', null, true);
+  const bubble = addMsg(logSel, 'assistant', '', null, true);
+  bubble.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
+  setBusy(logSel, true);
+  let text = '';
   try {
-    const res = await postJSON('/api/chat', { drift: a?.drift || null, report: a?.report || null, history: state.chat.slice(-8), question: q });
-    typing.remove();
-    const answer = (res.answer || '').trim() || 'I couldn\'t answer that one. Try rephrasing?';
-    addMsg(logSel, 'assistant', answer, a ? 'Answered by the assistant, from your summary' : null);
-    state.chat.push({ role: 'user', content: q }, { role: 'assistant', content: answer });
+    const r = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ drift: a?.drift || null, report: a?.report || null, stats: a ? chatStats(a) : null, history: chats[logSel].slice(-12), question: q }),
+    });
+    if (!r.ok) { const e = new Error('http'); e.status = r.status; throw e; }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', source = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+        if (!line.trim()) continue;
+        let m; try { m = JSON.parse(line); } catch { continue; }
+        if (m.t) { text += m.t; bubble.classList.remove('typing'); bubble.innerHTML = md(text); scrollLog(logSel); }
+        if (m.done) source = m.source;
+        if (m.error) throw new Error(m.error);
+      }
+    }
+    if (!text) throw new Error('empty');
+    if (a && source === 'ai') appendSrc(bubble, 'Answered by the assistant, using your summary — no titles or names');
+    chats[logSel].push({ role: 'user', content: q }, { role: 'assistant', content: text });
   } catch (err) {
-    typing.remove();
-    addMsg(logSel, 'assistant', err.status === 429 ? 'That\'s a lot of questions at once. Wait a minute and ask again.' : 'The assistant couldn\'t be reached. Try again in a moment.');
-  }
+    bubble.classList.remove('typing');
+    if (!text) bubble.textContent = err.status === 429 ? 'That\'s a lot of questions in a minute. Wait a moment and ask again.' : 'The assistant couldn\'t be reached just now. Check your connection and try again.';
+  } finally { setBusy(logSel, false); }
 }
+
+// What the assistant may see about your data: small aggregates only —
+// weekly totals, topic shares, hour-of-day shares, creator share percentages.
+function chatStats(a) {
+  const { items, weeks, file, extras } = a;
+  const top = (t) => Object.entries(t || {}).sort((x, y) => y[1] - x[1])[0]?.[0] || '';
+  const night = items.filter((x) => new Date(x.watchedAt).getHours() < 5).length;
+  return {
+    platform: file.platform || 'youtube',
+    totalItems: items.length,
+    weeks: weeks.map((w) => ({ week: w.label, items: w.count, sessions: w.sessions, intensity: w.intensity == null || !file.hasTitles ? null : +w.intensity.toFixed(2), topTopic: file.hasTitles ? topicName(top(w.topics)) : '' })),
+    topicShift: (extras.shift || []).map((t) => ({ topic: topicName(t.topic), earlyShare: +t.early.toFixed(3), recentShare: +t.late.toFixed(3) })),
+    hourShareRecent: extras.hours ? extras.hours.late.map((x) => +x.toFixed(3)) : [],
+    hourShareEarlier: extras.hours ? extras.hours.early.map((x) => +x.toFixed(3)) : [],
+    lateNightShare: items.length ? +(night / items.length).toFixed(3) : 0,
+    top3CreatorShare: extras.creators ? { earlier: +extras.creators.earlyTop3.toFixed(3), recent: +extras.creators.lateTop3.toFixed(3) } : null,
+    instagramInterests: extras.igTopics || [],
+  };
+}
+
+function setBusy(logSel, busy) {
+  const form = logSel === '#cwLog' ? $('#cwForm') : $('#askForm');
+  form?.querySelector('button[type=submit]')?.toggleAttribute('disabled', busy);
+}
+function scrollLog(logSel) { const l = $(logSel); if (l) l.scrollTop = l.scrollHeight; }
+function appendSrc(el, text) { const s = document.createElement('span'); s.className = 'src'; s.textContent = text; el.appendChild(s); }
 
 function addMsg(logSel, role, text, src, temp) {
   const log = $(logSel);
-  if (!log) return { remove() {} };
+  if (!log) return { remove() {}, classList: { remove() {} } };
   const d = document.createElement('div');
   d.className = `msg ${role}${temp ? ' typing' : ''}`;
-  d.textContent = text;
-  if (src) { const s = document.createElement('span'); s.className = 'src'; s.textContent = src; d.appendChild(s); }
+  if (role === 'assistant') d.innerHTML = md(text); else d.textContent = text;
+  if (src) appendSrc(d, src);
   log.appendChild(d);
   log.scrollTop = log.scrollHeight;
   return d;
 }
 
-// Floating assistant for general questions, anywhere on the page.
-const GENERAL_SUGGEST = ['How does Drift work?', 'What happens to my data?', 'What are the drift types?', 'How do I get my Instagram data?'];
+// Tiny, safe Markdown: escape everything first, then allow bold, italics,
+// inline code, http(s) links, bullet and numbered lists, and paragraphs.
+function md(src) {
+  const inline = (t) => esc(t)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const out = [];
+  let list = null;
+  for (const raw of String(src).split('\n')) {
+    const line = raw.trimEnd();
+    const ul = line.match(/^\s*[-*•]\s+(.*)/), ol = line.match(/^\s*\d+[.)]\s+(.*)/);
+    if (ul || ol) {
+      const tag = ul ? 'ul' : 'ol';
+      if (!list || list.tag !== tag) { if (list) out.push(`</${list.tag}>`); out.push(`<${tag}>`); list = { tag }; }
+      out.push(`<li>${inline((ul || ol)[1])}</li>`);
+      continue;
+    }
+    if (list) { out.push(`</${list.tag}>`); list = null; }
+    if (!line.trim()) continue;
+    out.push(`<p>${inline(line.replace(/^#+\s*/, ''))}</p>`);
+  }
+  if (list) out.push(`</${list.tag}>`);
+  return out.join('');
+}
+
+// Floating assistant: ask anything, anywhere on the page.
+const GENERAL_SUGGEST = ['How does Drift work?', 'How do YouTube recommendations actually work?', 'How do I get my Instagram data?', 'Help me plan a week with less scrolling'];
 function renderSuggest() {
-  const qs = state.analysis ? AI_SUGGEST : GENERAL_SUGGEST;
-  $('#cwSuggest').innerHTML = qs.map((q) => `<button type="button">${esc(q)}</button>`).join('');
-  $$('#cwSuggest button').forEach((b) => b.addEventListener('click', () => ask(b.textContent, '#cwLog')));
+  const qs = state.analysis ? ['What does my result mean?', 'Which week changed the most?', 'Help me plan next week', 'Is this reliable?'] : GENERAL_SUGGEST;
+  const box = $('#cwSuggest');
+  box.innerHTML = qs.map((q) => `<button type="button">${esc(q)}</button>`).join('');
+  $$('#cwSuggest button').forEach((b) => b.addEventListener('click', () => { box.classList.add('hidden'); ask(b.textContent, '#cwLog'); }));
 }
 const openChat = () => { $('#chatWidget').classList.remove('hidden'); $('#chatFab').classList.add('open'); $('#chatFab').setAttribute('aria-expanded', 'true'); setTimeout(() => $('#cwInput').focus(), 50); };
 const closeChat = () => { $('#chatWidget').classList.add('hidden'); $('#chatFab').classList.remove('open'); $('#chatFab').setAttribute('aria-expanded', 'false'); $('#chatFab').focus(); };
 $('#chatFab').addEventListener('click', openChat);
 $('#chatClose').addEventListener('click', closeChat);
-$('#cwForm').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#cwInput').value; $('#cwInput').value = ''; ask(v, '#cwLog'); });
+$('#chatExpand').addEventListener('click', () => { const w = $('#chatWidget'); w.classList.toggle('big'); $('#chatExpand').setAttribute('aria-label', w.classList.contains('big') ? 'Make smaller' : 'Make bigger'); });
+$('#chatNew').addEventListener('click', () => { chats['#cwLog'] = []; $('#cwLog').innerHTML = ''; addMsg('#cwLog', 'assistant', CHAT_HELLO()); $('#cwSuggest').classList.remove('hidden'); renderSuggest(); $('#cwInput').focus(); });
+const CHAT_HELLO = () => state.analysis
+  ? 'Ask me anything — about your result, your habits, or anything else on your mind.'
+  : 'Hi! Ask me anything — how Drift works, how feeds and algorithms work, or anything else. I\'ll answer properly.';
+const cwInput = $('#cwInput');
+const sendCw = () => { const v = cwInput.value; if (!v.trim()) return; cwInput.value = ''; cwInput.style.height = ''; $('#cwSuggest').classList.add('hidden'); ask(v, '#cwLog'); };
+$('#cwForm').addEventListener('submit', (e) => { e.preventDefault(); sendCw(); });
+cwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCw(); } });
+cwInput.addEventListener('input', () => { cwInput.style.height = 'auto'; cwInput.style.height = Math.min(140, cwInput.scrollHeight) + 'px'; });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#chatWidget').classList.contains('hidden')) closeChat(); });
+addMsg('#cwLog', 'assistant', CHAT_HELLO());
 renderSuggest();
 
 // ---------------------------------------------------------------------------
