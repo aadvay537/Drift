@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Help — Drift</title>
+  <meta name="description" content="Answers to common questions about Drift." />
+  <meta name="theme-color" content="#061418" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23061418'/%3E%3Cpath d='M10 22c12-8 22 8 44 0M10 34c14-6 24 6 44 0M10 46c16-4 26 4 44 0' stroke='%23F4B740' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="nav scrolled" id="nav">
+    <a class="wordmark" href="index.html" aria-label="Drift home">
+      <svg viewBox="0 0 40 24" aria-hidden="true"><path d="M2 6c9-5 17 5 36 0M2 12c11-4 19 4 36 0M2 18c13-3 21 3 36 0"/></svg>
+      drift
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="start.html">Get your report</a>
+      <a href="how.html">How it works</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="help.html">Help</a>
+    </nav>
+    <span id="modeBadge" class="mode" title="Whether the AI is running"></span>
+    <a href="start.html" class="btn btn-lantern btn-sm nav-cta">Start</a>
+    <details class="menu">
+      <summary aria-label="Menu">Menu</summary>
+      <div class="menu-list">
+        <a href="index.html">Home</a>
+        <a href="start.html">Get your report</a>
+        <a href="how.html">How it works</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="help.html">Help</a>
+        <a href="results.html">Shared results</a>
+      </div>
+    </details>
+  </header>
+
+  <main id="main">
+    <section class="page faq" aria-labelledby="faqTitle">
+      <h1 id="faqTitle">Help</h1>
+      <p class="section-lede">Can't find your answer? Press <strong>Ask Drift</strong> in the bottom corner and type your question.</p>
+      <details><summary>Where do I get my history file?</summary><p>On the <a href="start.html">Get your report</a> page, pick your app. Drift shows you exactly where to click inside that app to download your own history.</p></details>
+      <details><summary>How long does the download take?</summary><p>Google Takeout with only YouTube history is usually ready within minutes. Instagram and TikTok can take from a few minutes to a couple of days — they email you when it's ready.</p></details>
+      <details><summary>Do I need to unzip the file?</summary><p>No. You can add the whole .zip file as it is.</p></details>
+      <details><summary>Is the Drift Score good or bad?</summary><p>Neither. It's how far your recent weeks moved from your own earlier weeks, from 0 to 100. A higher number just means a bigger change.</p></details>
+      <details><summary>Why does Instagram or TikTok show less than YouTube?</summary><p>Their downloads don't include video titles, so there's nothing to read for topics. Drift still shows how often and when you watch, and for Instagram, which creators fill your feed.</p></details>
+      <details><summary>What if the page says "Waking the AI"?</summary><p>The AI server rests when nobody is using it. It wakes up while you get your file. If it's slow, Drift finishes your report on your own device instead.</p></details>
+      <details><summary>Can I trust the result?</summary><p>Drift shows patterns, not proof. If there isn't enough history it says so instead of guessing, and every report shows how confident it is.</p></details>
+      <details><summary>Does Drift save anything?</summary><p>Only what you choose. "Save to this device" keeps a tiny summary in your own browser so you can compare later. Sharing an anonymous summary is optional and asked at the start.</p></details>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span class="wordmark small"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M2 6c9-5 17 5 36 0M2 12c11-4 19 4 36 0M2 18c13-3 21 3 36 0"/></svg>drift</span>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="how.html">How it works</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="help.html">Help</a>
+      <a href="results.html">Shared results</a>
+      <a href="https://github.com/aadvay537/Drift" target="_blank" rel="noopener">Code</a>
+    </nav>
+  </footer>
+
+  <script type="module" src="page.js"></script>
+</body>
+</html>

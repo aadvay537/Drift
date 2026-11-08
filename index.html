@@ -4,10 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Drift — see where your feed has been taking you</title>
-  <meta name="description" content="Drop in your YouTube, Instagram, TikTok or Reddit history and see, in about two minutes, how your feed has shifted — what you watch, how intense it got, and when you watch. Your file never leaves your browser." />
+  <meta name="description" content="Drop in your YouTube, Instagram, TikTok or Reddit history and see how your feed has shifted. Your file never leaves your browser." />
   <meta name="theme-color" content="#061418" />
-  <meta property="og:title" content="Drift — see where your feed has been taking you" />
-  <meta property="og:description" content="A mirror for your feed. Private by design: your history never leaves your browser." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet" />
@@ -15,192 +13,70 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23061418'/%3E%3Cpath d='M10 22c12-8 22 8 44 0M10 34c14-6 24 6 44 0M10 46c16-4 26 4 44 0' stroke='%23F4B740' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
 </head>
 <body>
-  <a class="skip" href="#start">Skip to the app</a>
-
+  <a class="skip" href="#main">Skip to content</a>
   <header class="nav" id="nav">
-    <a class="wordmark" href="#top" aria-label="Drift home">
+    <a class="wordmark" href="index.html" aria-label="Drift home">
       <svg viewBox="0 0 40 24" aria-hidden="true"><path d="M2 6c9-5 17 5 36 0M2 12c11-4 19 4 36 0M2 18c13-3 21 3 36 0"/></svg>
       drift
     </a>
     <nav class="nav-links" aria-label="Main">
-      <a href="#how">How it works</a>
-      <a href="#privacy">Privacy</a>
-      <a href="#faq">Questions</a>
+      <a href="start.html">Get your report</a>
+      <a href="how.html">How it works</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="help.html">Help</a>
     </nav>
-    <span id="modeBadge" class="mode" title="Whether the AI is running live"></span>
-    <a href="#start" class="btn btn-lantern btn-sm nav-cta">Start</a>
+    <span id="modeBadge" class="mode" title="Whether the AI is running"></span>
+    <a href="start.html" class="btn btn-lantern btn-sm nav-cta">Start</a>
+    <details class="menu">
+      <summary aria-label="Menu">Menu</summary>
+      <div class="menu-list">
+        <a href="index.html">Home</a>
+        <a href="start.html">Get your report</a>
+        <a href="how.html">How it works</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="help.html">Help</a>
+        <a href="results.html">Shared results</a>
+      </div>
+    </details>
   </header>
 
-  <main id="top">
-    <!-- HERO: the currents canvas is the signature moment -->
-    <section class="hero" aria-labelledby="heroTitle">
+  <main id="main">
+    <section class="hero hero-home" aria-labelledby="heroTitle">
       <canvas id="currents" class="currents" aria-hidden="true"></canvas>
       <div class="hero-copy">
         <h1 id="heroTitle">Your feed has been drifting. See where it took you.</h1>
-        <p class="lede">Drop in your watch history from YouTube, Instagram, TikTok or Reddit. In about two minutes, Drift shows how what you see has shifted — and it never leaves your browser.</p>
+        <p class="lede">Drift looks at your own watch history from YouTube, Instagram, TikTok or Reddit and shows, in plain words, how what you see has changed. It takes about two minutes.</p>
         <div class="hero-actions">
-          <a href="#start" class="btn btn-lantern">See my drift</a>
-          <button id="heroSample" class="btn btn-quiet" type="button">Try it with sample data</button>
+          <a href="start.html" class="btn btn-lantern btn-lg">Get my report</a>
+          <a href="start.html?sample=1" class="btn btn-quiet btn-lg">See an example first</a>
         </div>
-        <ul class="hero-facts" aria-label="Key facts">
-          <li>No account</li>
-          <li>Free</li>
-          <li>Your file stays on your device</li>
-        </ul>
       </div>
     </section>
 
-    <!-- THE APP -->
-    <section id="start" class="app" aria-labelledby="appTitle">
-      <div class="app-head">
-        <h2 id="appTitle">Get your report</h2>
-        <ol class="stepper" id="stepper" aria-label="Progress">
-          <li data-step="1" class="on">Pick your app</li>
-          <li data-step="2">Get your history</li>
-          <li data-step="3">See your drift</li>
-        </ol>
-      </div>
-
-      <!-- Step 1: platform -->
-      <div class="panel" id="stepPick">
-        <p class="panel-lede">Where do you spend the most time?</p>
-        <div class="platforms" role="list">
-          <button class="platform" data-platform="youtube" role="listitem" type="button">
-            <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8c1.6.4 7.8.4 7.8.4s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5.2 3L10 15z"/></svg></span>
-            <span class="p-name">YouTube</span>
-            <span class="p-note">Topics, intensity, video length</span>
-          </button>
-          <button class="platform" data-platform="instagram" role="listitem" type="button">
-            <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.3"/></svg></span>
-            <span class="p-name">Instagram</span>
-            <span class="p-note">Creators, rhythm, your "interests"</span>
-          </button>
-          <button class="platform" data-platform="tiktok" role="listitem" type="button">
-            <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16.5 3c.4 2.3 1.9 3.8 4 4v3.1a7 7 0 0 1-4-1.3v6.4A5.8 5.8 0 1 1 10.7 9.4v3.2a2.7 2.7 0 1 0 2.7 2.7V3h3.1z"/></svg></span>
-            <span class="p-name">TikTok</span>
-            <span class="p-note">When and how often you watch</span>
-          </button>
-          <button class="platform" data-platform="reddit" role="listitem" type="button">
-            <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9.3" cy="13" r="1.2"/><circle cx="14.7" cy="13" r="1.2"/><path d="M9.5 16.2c1.5 1 3.5 1 5 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="18" cy="5" r="1.6"/><path d="M12 6.5 13 3l5 2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></span>
-            <span class="p-name">Reddit</span>
-            <span class="p-note">Topics and intensity of posts</span>
-          </button>
-        </div>
-        <div class="pick-foot">
-          <button id="sampleBtn" class="btn btn-quiet" type="button">Not ready? Try it with sample data</button>
-          <div id="pastRuns" class="past hidden"></div>
-        </div>
-      </div>
-
-      <!-- Step 2: how to get history + drop -->
-      <div class="panel hidden" id="stepGet">
-        <button class="back" id="backToPick" type="button">Change app</button>
-        <div class="get-layout">
-          <div class="guide" id="guide" aria-live="polite"></div>
-          <div class="drop-col">
-            <div id="drop" class="dropzone" tabindex="0" role="button" aria-label="Drop your history file here, or press Enter to choose a file">
-              <svg class="drop-art" viewBox="0 0 120 60" aria-hidden="true"><path d="M4 18c28-14 52 14 112 0M4 30c32-10 56 10 112 0M4 42c36-6 60 6 112 0"/></svg>
-              <p class="drop-title">Drop your file here</p>
-              <p class="drop-sub" id="dropSub">.json or the whole .zip — it's read right here, never uploaded</p>
-              <span class="btn btn-quiet btn-sm">Choose a file</span>
-              <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" hidden />
-            </div>
-            <p class="drop-safe">Nothing is sent until you've seen exactly what will be sent.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Step 3: analysing, then the report -->
-      <div class="panel hidden" id="stepRun" aria-live="polite"></div>
-    </section>
-
-    <!-- HOW IT WORKS -->
-    <section id="how" class="how" aria-labelledby="howTitle">
-      <h2 id="howTitle">How Drift reads your feed</h2>
-      <p class="section-lede">The AI reads. Plain, published maths decides. You see everything before it's sent.</p>
-      <ol class="pipeline">
-        <li><h3>Your file stays here</h3><p>It's opened inside this page. It's never uploaded to us.</p><span class="where here">On your device</span></li>
-        <li><h3>Names come out</h3><p>Creator names and @handles are stripped before anything leaves.</p><span class="where here">On your device</span></li>
-        <li><h3>An AI tags each title</h3><p>Only cleaned titles go out, to be tagged with a topic and how charged they are. Then they're deleted.</p><span class="where out">Titles only</span></li>
-        <li><h3>Fixed rules decide</h3><p>Published thresholds compare your recent weeks to your own earlier weeks. Same file, same answer.</p><span class="where here">On your device</span></li>
-        <li><h3>A report, double-checked</h3><p>One AI writes it, a second checks the tone: no scare words, no blame, no comparing you to anyone.</p><span class="where out">Summary only</span></li>
+    <section class="page simple-steps" aria-labelledby="stepsTitle">
+      <h2 id="stepsTitle">Three simple steps</h2>
+      <ol class="three">
+        <li><h3>Choose your app</h3><p>YouTube, Instagram, TikTok or Reddit.</p></li>
+        <li><h3>Download your history</h3><p>We show you exactly where to click. It's your own data, from the app itself.</p></li>
+        <li><h3>Read your report</h3><p>A short, calm summary of how your feed changed — and one small thing to try.</p></li>
       </ol>
-      <div class="types">
-        <article><h3>Narrowing</h3><p>Fewer topics are taking up more of your time. Fires when your distinct topics shrink by more than 15%.</p></article>
-        <article><h3>Escalation</h3><p>What you watch is getting more emotionally charged. Fires when average intensity rises more than 10%.</p></article>
-        <article><h3>Engagement drift</h3><p>Shorter videos, more often. Fires when videos get 20% shorter and sessions 25% more frequent.</p></article>
+      <div class="promise">
+        <p><strong>Your history stays on your device.</strong> It's opened inside this page and never uploaded. <a href="privacy.html">How we keep it private</a></p>
       </div>
-    </section>
-
-    <!-- PRIVACY -->
-    <section id="privacy" class="privacy" aria-labelledby="privTitle">
-      <div class="priv-grid">
-        <div>
-          <h2 id="privTitle">Private by design, not by promise</h2>
-          <p>Your history file is opened inside this page and never uploaded. When you watch, how long, and who you watch are worked out on your own device. Only cleaned-up titles reach the AI, which deletes them and never trains on them. For Instagram and TikTok, nothing from your file leaves at all. All the code is public, so anyone can check.</p>
-          <a class="text-link" href="https://github.com/aadvay537/Drift" target="_blank" rel="noopener">Read the code on GitHub</a>
-        </div>
-        <ul class="never" aria-label="What Drift never does">
-          <li>Never blocks, filters or recommends anything</li>
-          <li>Never says the algorithm <em>caused</em> your habits</li>
-          <li>Never compares you to other people</li>
-          <li>Never sends your file, your name, or your habits</li>
-          <li>Never tells anyone else, unless you share it</li>
-        </ul>
-      </div>
-    </section>
-
-    <!-- FAQ -->
-    <section id="faq" class="faq" aria-labelledby="faqTitle">
-      <h2 id="faqTitle">Questions</h2>
-      <details><summary>Is the Drift Score good or bad?</summary><p>Neither. It's how far your recent weeks moved from your own earlier weeks, from 0 to 100. A high number just means a bigger change.</p></details>
-      <details><summary>Why does Instagram or TikTok show less than YouTube?</summary><p>Their downloads don't include video titles, so there's nothing to read for topics. Drift still shows your rhythm — when and how often you watch — and, for Instagram, which creators take up your feed and what interests Instagram has guessed for you.</p></details>
-      <details><summary>How long does my data download take?</summary><p>Google Takeout with only YouTube history is usually ready in minutes. Instagram and TikTok can take from a few minutes to a couple of days — they email you when it's ready.</p></details>
-      <details><summary>Does Drift save anything?</summary><p>Only if you press "Save to this device". That keeps a small summary (your score and drift type — no titles) in your browser so you can compare runs later. Clear it any time.</p></details>
-      <details><summary>Can I trust the result?</summary><p>Drift shows patterns, not proof. If there isn't enough history it says so instead of guessing, and every report shows how confident it is.</p></details>
     </section>
   </main>
 
   <footer class="foot">
     <span class="wordmark small"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M2 6c9-5 17 5 36 0M2 12c11-4 19 4 36 0M2 18c13-3 21 3 36 0"/></svg>drift</span>
-    <p>A mirror for your feed. Rules v<span id="rulesV"></span>, open source.</p>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="how.html">How it works</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="help.html">Help</a>
+      <a href="results.html">Shared results</a>
+      <a href="https://github.com/aadvay537/Drift" target="_blank" rel="noopener">Code</a>
+    </nav>
   </footer>
 
-  <!-- "What we send" preview -->
-  <div id="sendModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sendTitle">
-    <div class="modal-card">
-      <h3 id="sendTitle">Here's exactly what will be sent</h3>
-      <p class="modal-lede" id="sendLede"></p>
-      <div id="sendStats" class="send-stats"></div>
-      <pre id="sendPreview" class="send-preview"></pre>
-      <div class="modal-actions">
-        <button id="sendCancel" class="btn btn-quiet" type="button">Cancel</button>
-        <button id="sendConfirm" class="btn btn-lantern" type="button">Analyse my history</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Assistant launcher (general questions, anywhere on the page) -->
-  <button id="chatFab" class="chat-fab" aria-label="Ask Drift a question" aria-expanded="false" type="button">Ask Drift</button>
-  <section id="chatWidget" class="chat-widget hidden" role="dialog" aria-label="Drift assistant">
-    <header class="cw-head">
-      <span class="cw-title"><span class="cw-dot"></span>Ask Drift</span>
-      <span class="cw-tools">
-        <button id="chatNew" class="cw-btn" type="button" aria-label="Start a new chat" title="New chat"><svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button>
-        <button id="chatExpand" class="cw-btn" type="button" aria-label="Make bigger" title="Bigger"><svg viewBox="0 0 20 20"><path d="M12 3h5v5M8 17H3v-5M17 3l-6 6M3 17l6-6"/></svg></button>
-        <button id="chatClose" class="cw-btn" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
-      </span>
-    </header>
-    <div class="cw-log" id="cwLog" aria-live="polite"></div>
-    <div class="cw-suggest" id="cwSuggest"></div>
-    <form class="cw-form" id="cwForm" autocomplete="off">
-      <textarea id="cwInput" rows="1" placeholder="Ask anything…" aria-label="Your question" maxlength="2000"></textarea>
-      <button class="cw-send" type="submit" aria-label="Send"><svg viewBox="0 0 20 20"><path d="M4 10h11M10 4l6 6-6 6"/></svg></button>
-    </form>
-  </section>
-
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-  <script type="module" src="app.js"></script>
+  <script type="module" src="home.js"></script>
 </body>
 </html>
