@@ -16,6 +16,16 @@ This is a working implementation of the [Drift PRD v3.1](./Drift-PRD-v3.1-simple
 - **Share card** (PNG) and **saved runs** (summary only, in your browser) to compare over time.
 - **Under the hood** — current model names, a fast cheap model for labelling (`DRIFT_LABEL_MODEL`), parallel batches, a shared label cache, per-visitor rate limits, security headers, and an honest `/api/health` so a broken key or model name can't hide behind the demo engine.
 
+## Pages (v4.1)
+
+`index.html` home · `start.html` get your report (consent → app → history → report) · `how.html` · `privacy.html` · `help.html` · `results.html` shared totals. Shared code lives in `public/common.js` (AI connection, Ask Drift, formatting).
+
+## Anonymous, opt-in sharing
+
+Before choosing an app, people answer: share an anonymous summary or not; age group; for 13–17, whether a parent agreed. Under-13s and example reports never share. After the report they answer "Did this feel accurate?" and only then is a fixed summary sent (`POST /api/contribute`): drift type, score, weekly totals, topic shares, late-night share, accuracy, age group — no titles, names or timestamps. A delete token is kept in their browser for "Remove my summary". Totals: `GET /api/results`.
+
+Storage: set `DATABASE_URL` (Postgres, e.g. a free Neon database) for durable storage. Without it, summaries go to a temporary file that resets on every Render deploy/restart.
+
 ## Quick start
 
 ```bash

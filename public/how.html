@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How it works — Drift</title>
+  <meta name="description" content="How Drift reads your feed: the AI reads, published maths decides." />
+  <meta name="theme-color" content="#061418" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23061418'/%3E%3Cpath d='M10 22c12-8 22 8 44 0M10 34c14-6 24 6 44 0M10 46c16-4 26 4 44 0' stroke='%23F4B740' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="nav scrolled" id="nav">
+    <a class="wordmark" href="index.html" aria-label="Drift home">
+      <svg viewBox="0 0 40 24" aria-hidden="true"><path d="M2 6c9-5 17 5 36 0M2 12c11-4 19 4 36 0M2 18c13-3 21 3 36 0"/></svg>
+      drift
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="start.html">Get your report</a>
+      <a href="how.html">How it works</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="help.html">Help</a>
+    </nav>
+    <span id="modeBadge" class="mode" title="Whether the AI is running"></span>
+    <a href="start.html" class="btn btn-lantern btn-sm nav-cta">Start</a>
+    <details class="menu">
+      <summary aria-label="Menu">Menu</summary>
+      <div class="menu-list">
+        <a href="index.html">Home</a>
+        <a href="start.html">Get your report</a>
+        <a href="how.html">How it works</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="help.html">Help</a>
+        <a href="results.html">Shared results</a>
+      </div>
+    </details>
+  </header>
+
+  <main id="main">
+    <section class="page" aria-labelledby="howTitle">
+      <h1 id="howTitle">How Drift works</h1>
+      <p class="section-lede">The AI reads. Simple, published maths decides. You see everything before it's sent.</p>
+      <ol class="pipeline">
+        <li><h3>Your file stays here</h3><p>It's opened inside this page. It's never uploaded to us.</p><span class="where here">On your device</span></li>
+        <li><h3>Names come out</h3><p>Creator names and @handles are removed before anything leaves.</p><span class="where here">On your device</span></li>
+        <li><h3>An AI tags each title</h3><p>Only cleaned titles go out, to be tagged with a topic and how emotionally charged they are. Then they're deleted.</p><span class="where out">Titles only</span></li>
+        <li><h3>Fixed rules decide</h3><p>Published thresholds compare your recent weeks with your own earlier weeks. Same file, same answer, every time.</p><span class="where here">On your device</span></li>
+        <li><h3>A calm report</h3><p>One AI writes it and a second checks the tone: no scare words, no blame, no comparing you to anyone.</p><span class="where out">Summary only</span></li>
+      </ol>
+      <h2 class="sub-h">What Drift looks for</h2>
+      <div class="types">
+        <article><h3>Narrowing</h3><p>Fewer topics are taking up more of your time. Shown when your range of topics shrinks by more than 15%.</p></article>
+        <article><h3>Escalation</h3><p>What you watch is getting more emotionally charged. Shown when the average rises by more than 10%.</p></article>
+        <article><h3>Engagement drift</h3><p>Shorter videos, more often. Shown when videos get 20% shorter and you open the app 25% more often.</p></article>
+      </div>
+      <p class="fine-print">Instagram and TikTok downloads don't include video titles, so for those Drift looks at your rhythm — how often and when you watch — and, for Instagram, which creators fill your feed.</p>
+      <div class="row-end"><a href="start.html" class="btn btn-lantern btn-lg">Get my report</a></div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span class="wordmark small"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M2 6c9-5 17 5 36 0M2 12c11-4 19 4 36 0M2 18c13-3 21 3 36 0"/></svg>drift</span>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="how.html">How it works</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="help.html">Help</a>
+      <a href="results.html">Shared results</a>
+      <a href="https://github.com/aadvay537/Drift" target="_blank" rel="noopener">Code</a>
+    </nav>
+  </footer>
+
+  <script type="module" src="page.js"></script>
+</body>
+</html>

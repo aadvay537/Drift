@@ -4,13 +4,8 @@ import { computeDrift, RULES_VERSION } from './drift.js';
 import { ensureUsableTimeline, parseFlexibleDate, cleanItems, normalizeHistoryFile } from './normalize.js';
 import { readHistoryFile } from './platforms.js';
 import { keywordLabel } from './labeler.js';
-import { weeklyTimeline, turningPoint, creatorConcentration, hourProfile, topicShift, askLocal, topicName } from './insights.js';
-
-const $ = (s, r = document) => r.querySelector(s);
-const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const pct = (x) => Math.round(x * 100);
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+import { weeklyTimeline, turningPoint, creatorConcentration, hourProfile, topicShift, topicName } from './insights.js';
+import { $, $$, esc, pct, reduceMotion, ctx, API, server, waitForServer, postJSON, ask, chats, renderSuggest, toast } from './common.js';
 
 const state = {
   platform: null,
@@ -21,120 +16,16 @@ const state = {
   bmSource: '',
 };
 
-$('#rulesV').textContent = RULES_VERSION;
-
-// ---------------------------------------------------------------------------
-// The AI server. The page itself is served from GitHub Pages (instant); the AI
-// lives on Render, which sleeps when idle. We start waking it the moment you
-// arrive, so it's usually ready by the time you've found your history file.
-// ---------------------------------------------------------------------------
-const API = /github\.io$/.test(location.hostname) || location.protocol === 'file:' ? 'https://drift-aatp.onrender.com' : '';
-const server = { up: false, live: false, waiters: [] };
-
-function setBadge(kind, text) {
-  const b = $('#modeBadge');
-  b.className = 'mode ' + kind;
-  b.textContent = text;
-}
-async function wakeServer() {
-  setBadge('waking', 'Waking the AI…');
-  const t0 = Date.now();
-  while (Date.now() - t0 < 6 * 60 * 1000) {
-    try {
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 20000);
-      const r = await fetch(API + '/api/status', { signal: ctl.signal, cache: 'no-store' });
-      clearTimeout(timer);
-      if (r.ok) {
-        const st = await r.json();
-        server.up = true;
-        server.live = st.mode === 'live' && st.health !== 'failing';
-        if (server.live) setBadge('live', 'Live AI');
-        else if (st.mode === 'live') setBadge('degraded', 'AI unavailable — using backup');
-        else setBadge('', 'Demo engine');
-        server.waiters.splice(0).forEach((fn) => fn(true));
-        return;
-      }
-    } catch { /* still asleep — keep trying */ }
-    await new Promise((res) => setTimeout(res, 4000));
-  }
-  setBadge('degraded', 'AI offline — using backup');
-  server.waiters.splice(0).forEach((fn) => fn(false));
-}
-// Resolve true once the server answers, or false after `ms`.
-function waitForServer(ms) {
-  if (server.up) return Promise.resolve(true);
-  return new Promise((resolve) => {
-    const done = (ok) => { clearTimeout(t); resolve(ok); };
-    const t = setTimeout(() => { server.waiters.splice(server.waiters.indexOf(done) >>> 0, 1); resolve(false); }, ms);
-    server.waiters.push(done);
-  });
-}
-wakeServer();
-
-// Nav goes solid once you leave the hero.
-const nav = $('#nav');
-addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 40), { passive: true });
-
-// ---------------------------------------------------------------------------
-// The hero: many varied currents that slowly drift toward one narrow channel.
-// It's the whole idea of Drift in one picture. Paused when off-screen.
-// ---------------------------------------------------------------------------
-(function currents() {
-  const cv = $('#currents');
-  const ctx = cv.getContext('2d');
-  const colors = ['#63cfae', '#7fb4e6', '#c39bef', '#f0846c', '#e6d38a', '#5fa3a0'];
-  let w, h, dpr, lines = [], visible = true, t0 = performance.now();
-  function size() {
-    dpr = Math.min(2, devicePixelRatio || 1);
-    w = cv.clientWidth; h = cv.clientHeight;
-    cv.width = w * dpr; cv.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const n = w < 700 ? 34 : 64;
-    lines = Array.from({ length: n }, (_, i) => ({
-      y0: (i + 0.5) / n,
-      amp: 6 + Math.random() * 18,
-      freq: 0.004 + Math.random() * 0.006,
-      speed: 0.15 + Math.random() * 0.35,
-      phase: Math.random() * 6.28,
-      color: i % 9 === 4 ? '#f4b740' : colors[i % colors.length],
-      alpha: 0.18 + Math.random() * 0.32,
-    }));
-  }
-  function frame(now) {
-    if (!visible) return;
-    const t = (now - t0) / 1000;
-    ctx.clearRect(0, 0, w, h);
-    const target = h * 0.34; // where the currents converge, top-right
-    for (const L of lines) {
-      ctx.beginPath();
-      for (let x = 0; x <= w; x += 8) {
-        const p = x / w;
-        const pull = p * p * (3 - 2 * p); // smoothstep: spread on the left, narrow on the right
-        const base = L.y0 * h * (1 - pull) + (target + (L.y0 - 0.5) * h * 0.06) * pull;
-        const y = base + Math.sin(x * L.freq + t * L.speed + L.phase) * L.amp * (1 - pull * 0.7);
-        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.strokeStyle = L.color;
-      ctx.globalAlpha = L.alpha;
-      ctx.lineWidth = L.color === '#f4b740' ? 1.8 : 1.1;
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    if (!reduceMotion) requestAnimationFrame(frame);
-  }
-  size();
-  addEventListener('resize', () => { size(); if (reduceMotion) frame(performance.now()); });
-  new IntersectionObserver(([e]) => { const was = visible; visible = e.isIntersecting; if (visible && !was && !reduceMotion) requestAnimationFrame(frame); }).observe(cv);
-  requestAnimationFrame(frame);
-})();
+const rv = $('#rulesV'); if (rv) rv.textContent = RULES_VERSION;
 
 // ---------------------------------------------------------------------------
 // Steps: pick → get → run
 // ---------------------------------------------------------------------------
 function goStep(n) {
-  $('#stepPick').classList.toggle('hidden', n !== 1);
-  $('#stepGet').classList.toggle('hidden', n !== 2);
-  $('#stepRun').classList.toggle('hidden', n !== 3);
+  $('#stepConsent').classList.toggle('hidden', n !== 1);
+  $('#stepPick').classList.toggle('hidden', n !== 2);
+  $('#stepGet').classList.toggle('hidden', n !== 3);
+  $('#stepRun').classList.toggle('hidden', n !== 4);
   $$('#stepper li').forEach((li) => {
     const s = +li.dataset.step;
     li.classList.toggle('on', s === n);
@@ -145,12 +36,57 @@ function goStep(n) {
 $$('.platform').forEach((b) => b.addEventListener('click', () => {
   state.platform = b.dataset.platform;
   renderGuide(state.platform);
-  goStep(2);
+  goStep(3);
   $('#start').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
 }));
-$('#backToPick').addEventListener('click', () => goStep(1));
+$('#backToPick').addEventListener('click', () => goStep(2));
+$('#backToConsent').addEventListener('click', () => goStep(1));
 $('#sampleBtn').addEventListener('click', loadSample);
-$('#heroSample').addEventListener('click', () => { $('#start').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' }); loadSample(); });
+
+// ---------------------------------------------------------------------------
+// Step 1: the consent questions. Sharing an anonymous summary is optional;
+// 13–17s need a parent's OK; nothing is ever shared for under-13s.
+// ---------------------------------------------------------------------------
+const CONSENT_KEY = 'drift.consent.v1';
+function loadConsent() { try { return JSON.parse(localStorage.getItem(CONSENT_KEY) || 'null'); } catch { return null; } }
+state.consent = loadConsent();
+
+function readConsentForm() {
+  const share = $('input[name=share]:checked')?.value;
+  const age = $('input[name=age]:checked')?.value;
+  const parent = $('input[name=parent]:checked')?.value;
+  $('#qAge').classList.toggle('hidden', share !== 'yes');
+  $('#qParent').classList.toggle('hidden', !(share === 'yes' && age === '13-17'));
+  const note = $('#consentNote');
+  let ready = false, result = null;
+  if (share === 'no') { ready = true; result = { share: false }; note.textContent = 'Got it. Nothing about your report will be kept.'; }
+  else if (share === 'yes' && age === '18+') { ready = true; result = { share: true, ageGroup: '18+' }; note.textContent = 'Thank you. After your report, you\'ll be asked one quick question before anything is shared.'; }
+  else if (share === 'yes' && age === 'under13') { ready = true; result = { share: false }; note.textContent = 'Thanks for telling us. Drift doesn\'t keep anything for under-13s, so your report will stay on your device only.'; }
+  else if (share === 'yes' && age === '13-17' && parent === 'yes') { ready = true; result = { share: true, ageGroup: '13-17' }; note.textContent = 'Thank you. After your report, you\'ll be asked one quick question before anything is shared.'; }
+  else if (share === 'yes' && age === '13-17' && parent === 'no') { ready = true; result = { share: false }; note.textContent = 'No problem. Your report will stay on your device only. You can share another time once a parent agrees.'; }
+  else note.textContent = '';
+  $('#consentNext').disabled = !ready;
+  return result;
+}
+$$('#stepConsent input').forEach((i) => i.addEventListener('change', readConsentForm));
+$('#consentNext').addEventListener('click', () => {
+  const c = readConsentForm();
+  if (!c) return;
+  state.consent = { ...c, at: Date.now() };
+  try { localStorage.setItem(CONSENT_KEY, JSON.stringify(state.consent)); } catch { /* private mode */ }
+  goStep(2);
+  $('#start').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+});
+// Pre-fill a choice made on an earlier visit (they can still change it).
+if (state.consent) {
+  const c = state.consent;
+  const set = (name, v) => { const el = $(`input[name=${name}][value="${v}"]`); if (el) el.checked = true; };
+  set('share', c.share ? 'yes' : 'no');
+  if (c.share) { set('age', c.ageGroup); if (c.ageGroup === '13-17') set('parent', 'yes'); }
+  readConsentForm();
+}
+// "See an example first" from the home page goes straight to the sample.
+if (new URLSearchParams(location.search).has('sample')) loadSample();
 
 // ---------------------------------------------------------------------------
 // Per-platform guides. One clear recommended route, alternatives in tabs.
@@ -377,7 +313,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#sen
 const RUN_STEPS = ['Reading your file on this device', 'Tagging topics and intensity', 'Applying the published rules', 'Writing your report and checking its tone'];
 
 function showRunning(skipLabel) {
-  goStep(3);
+  goStep(4);
   const steps = skipLabel ? RUN_STEPS.filter((_, i) => i !== 1) : RUN_STEPS;
   $('#stepRun').innerHTML = `<div class="running"><h3>Reading your drift…</h3><ol class="run-steps">${steps.map((s) => `<li>${s}</li>`).join('')}</ol></div>`;
   $('#start').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
@@ -433,6 +369,7 @@ async function analyze({ file, items, cleaned }) {
     next();
 
     state.analysis = { drift, report, items: prepared.items, weeks, file, extras };
+    ctx.analysis = state.analysis;
     chats['#askLog'] = [];
     renderReport();
   } catch (err) {
@@ -514,12 +451,6 @@ function browserReport(drift) {
   };
 }
 
-async function postJSON(url, body) {
-  const r = await fetch(API + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!r.ok) { const e = new Error(await r.text()); e.status = r.status; throw e; }
-  return r.json();
-}
-
 // ---------------------------------------------------------------------------
 // The report
 // ---------------------------------------------------------------------------
@@ -544,6 +475,7 @@ function renderReport() {
   const cols = small.length + 1 === 3 ? 'third' : small.length ? '' : 'wide';
   small.forEach((h) => tiles.push(`<div class="tile ${cols}">${h}</div>`));
   tiles.push(`<div class="tile ${cols} try"><h4>One thing to try</h4><p class="sub">Optional. Just an experiment.</p><p class="body">${esc(report.tryThis)}</p></div>`);
+  if (real) tiles.push(shareTile());
   if (real) tiles.push(askPanel());
 
   $('#stepRun').innerHTML = `
@@ -572,11 +504,85 @@ function renderReport() {
     </div>`;
 
   requestAnimationFrame(() => { const v = $('.dial .val'); if (v) v.style.strokeDashoffset = v.dataset.to; });
-  $('#againBtn').addEventListener('click', () => { state.analysis = null; goStep(1); renderPastRuns(); });
+  $('#againBtn').addEventListener('click', () => { state.analysis = null; ctx.analysis = null; goStep(2); renderPastRuns(); });
   $('#shareBtn')?.addEventListener('click', shareCard);
   $('#saveBtn')?.addEventListener('click', saveRun);
   if (real) wireAsk();
+  if (real) wireShare();
   renderSuggest();
+}
+
+// ---------------------------------------------------------------------------
+// The optional anonymous summary. Only offered if they said yes at the start
+// (and never for example reports). They answer one question, then it's sent.
+// ---------------------------------------------------------------------------
+const SHARED_KEY = 'drift.shared.v1';
+function sharedList() { try { return JSON.parse(localStorage.getItem(SHARED_KEY) || '[]'); } catch { return []; } }
+
+function shareTile() {
+  const { file } = state.analysis;
+  const c = state.consent;
+  if (file.sample || !c?.share) {
+    return `<div class="tile wide quiet-tile"><h4>Was this accurate?</h4><p class="sub" style="margin:0">${file.sample ? 'This is an example report, so nothing is shared.' : 'You chose to keep everything on your device, so nothing about this report is kept.'}</p></div>`;
+  }
+  return `<div class="tile wide share-tile" id="shareTile">
+    <h4>One quick question: did this result feel accurate?</h4>
+    <p class="sub">Your answer and an anonymous summary will be shared to help improve Drift, as you agreed. No titles, names or dates.</p>
+    <div class="mcq-row" role="group" aria-label="Did this feel accurate?">
+      <button class="opt-btn" data-acc="yes" type="button">Yes</button>
+      <button class="opt-btn" data-acc="partly" type="button">Partly</button>
+      <button class="opt-btn" data-acc="no" type="button">No</button>
+      <button class="opt-btn" data-acc="unsure" type="button">Not sure</button>
+    </div>
+    <p class="sub" style="margin:14px 0 0"><button class="linkish" id="skipShare" type="button">Don't share this one</button></p>
+  </div>`;
+}
+
+function contributionPayload(accuracy) {
+  const { drift, items, weeks, file, extras } = state.analysis;
+  const night = items.filter((x) => new Date(x.watchedAt).getHours() < 5).length;
+  return {
+    platform: file.platform || 'youtube',
+    type: drift.type, score: drift.driftScore, severity: drift.severity, percent: drift.percent,
+    confidence: drift.confidence, coverageDays: drift.coverageDays, itemCount: drift.itemCount ?? items.length,
+    estimatedDates: !!drift.estimatedDates,
+    ageGroup: state.consent.ageGroup, accuracy,
+    lateNightShare: items.length ? night / items.length : null,
+    top3CreatorShare: extras.creators ? { earlier: extras.creators.earlyTop3, recent: extras.creators.lateTop3 } : null,
+    topicShift: (extras.shift || []).map((t) => ({ topic: topicName(t.topic), earlyShare: t.early, recentShare: t.late })),
+    weekly: weeks.map((w) => ({ items: w.count, sessions: w.sessions, intensity: file.hasTitles ? w.intensity : null })),
+    rules: RULES_VERSION,
+  };
+}
+
+function wireShare() {
+  const tile = $('#shareTile');
+  if (!tile) return;
+  $$('[data-acc]', tile).forEach((b) => b.addEventListener('click', async () => {
+    $$('[data-acc]', tile).forEach((x) => (x.disabled = true));
+    b.classList.add('picked');
+    try {
+      if (!server.up && !(await waitForServer(60000))) throw new Error('asleep');
+      const r = await postJSON('/api/contribute', contributionPayload(b.dataset.acc));
+      const list = sharedList(); list.push({ id: r.id, token: r.deleteToken, at: Date.now() });
+      try { localStorage.setItem(SHARED_KEY, JSON.stringify(list.slice(-50))); } catch { /* ignore */ }
+      tile.innerHTML = `<h4>Thank you — shared anonymously</h4><p class="sub" style="margin:0">It helps make Drift more accurate for everyone. <a class="text-link" href="results.html">See the shared totals</a></p>
+        <p style="margin-top:14px"><button class="btn btn-quiet btn-sm" id="unshare" type="button">Remove my summary</button></p>`;
+      $('#unshare').addEventListener('click', async () => {
+        try {
+          const res = await fetch(API + '/api/contribute/' + encodeURIComponent(r.id), { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: r.deleteToken }) });
+          if (!res.ok && res.status !== 404) throw new Error();
+          try { localStorage.setItem(SHARED_KEY, JSON.stringify(sharedList().filter((x) => x.id !== r.id))); } catch { /* ignore */ }
+          tile.innerHTML = '<h4>Removed</h4><p class="sub" style="margin:0">Your summary has been deleted.</p>';
+        } catch { toast('Couldn\'t remove it just now. Please try again.'); }
+      });
+    } catch {
+      $$('[data-acc]', tile).forEach((x) => (x.disabled = false));
+      b.classList.remove('picked');
+      toast('Couldn\'t share just now. Please try again in a minute.');
+    }
+  }));
+  $('#skipShare')?.addEventListener('click', () => { tile.innerHTML = '<h4>Not shared</h4><p class="sub" style="margin:0">Nothing about this report is kept.</p>'; });
 }
 
 function platformName(p) { return { youtube: 'YouTube', reddit: 'Reddit', instagram: 'Instagram', tiktok: 'TikTok' }[p] || 'YouTube'; }
@@ -679,163 +685,6 @@ function wireAsk() {
   $('#askForm').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#askInput').value; $('#askInput').value = ''; ask(v, '#askLog'); });
 }
 
-// Each chat box keeps its own conversation, so follow-up questions make sense.
-const chats = { '#askLog': [], '#cwLog': [] };
-
-async function ask(question, logSel, { fromChip = false } = {}) {
-  const q = String(question || '').trim();
-  if (!q) return;
-  addMsg(logSel, 'user', q);
-  const a = state.analysis;
-  // Suggested questions about your own history are answered right here, on
-  // this device (they can quote your titles, which never leave the browser).
-  if (a && fromChip) {
-    const local = askLocal(q, { items: a.items, weeks: a.weeks, drift: a.drift });
-    if (local) { addMsg(logSel, 'assistant', local, 'Answered on your device'); chats[logSel].push({ role: 'user', content: q }, { role: 'assistant', content: local }); return; }
-  }
-  const bubble = addMsg(logSel, 'assistant', '', null, true);
-  bubble.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
-  setBusy(logSel, true);
-  let text = '';
-  try {
-    if (!server.up) {
-      bubble.innerHTML = '<span class="dots"><i></i><i></i><i></i></span> <span class="wake-note">Waking the AI — first visit takes up to a minute</span>';
-      if (!(await waitForServer(150000))) { const e = new Error('asleep'); e.status = 503; throw e; }
-      bubble.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
-    }
-    const r = await fetch(API + '/api/chat', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ drift: a?.drift || null, report: a?.report || null, stats: a ? chatStats(a) : null, history: chats[logSel].slice(-12), question: q }),
-    });
-    if (!r.ok) { const e = new Error('http'); e.status = r.status; throw e; }
-    const reader = r.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '', source = '';
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let nl;
-      while ((nl = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-        if (!line.trim()) continue;
-        let m; try { m = JSON.parse(line); } catch { continue; }
-        if (m.t) { text += m.t; bubble.classList.remove('typing'); bubble.innerHTML = md(text); scrollLog(logSel); }
-        if (m.done) source = m.source;
-        if (m.error) throw new Error(m.error);
-      }
-    }
-    if (!text) throw new Error('empty');
-    if (a && source === 'ai') appendSrc(bubble, 'Answered by the assistant, using your summary — no titles or names');
-    chats[logSel].push({ role: 'user', content: q }, { role: 'assistant', content: text });
-  } catch (err) {
-    bubble.classList.remove('typing');
-    if (!text) bubble.textContent = err.status === 503 ? 'The AI server is still starting up. Try again in a minute.' : err.status === 429 ? 'That\'s a lot of questions in a minute. Wait a moment and ask again.' : 'The assistant couldn\'t be reached just now. Check your connection and try again.';
-  } finally { setBusy(logSel, false); }
-}
-
-// What the assistant may see about your data: small aggregates only —
-// weekly totals, topic shares, hour-of-day shares, creator share percentages.
-function chatStats(a) {
-  const { items, weeks, file, extras } = a;
-  const top = (t) => Object.entries(t || {}).sort((x, y) => y[1] - x[1])[0]?.[0] || '';
-  const night = items.filter((x) => new Date(x.watchedAt).getHours() < 5).length;
-  return {
-    platform: file.platform || 'youtube',
-    totalItems: items.length,
-    weeks: weeks.map((w) => ({ week: w.label, items: w.count, sessions: w.sessions, intensity: w.intensity == null || !file.hasTitles ? null : +w.intensity.toFixed(2), topTopic: file.hasTitles ? topicName(top(w.topics)) : '' })),
-    topicShift: (extras.shift || []).map((t) => ({ topic: topicName(t.topic), earlyShare: +t.early.toFixed(3), recentShare: +t.late.toFixed(3) })),
-    hourShareRecent: extras.hours ? extras.hours.late.map((x) => +x.toFixed(3)) : [],
-    hourShareEarlier: extras.hours ? extras.hours.early.map((x) => +x.toFixed(3)) : [],
-    lateNightShare: items.length ? +(night / items.length).toFixed(3) : 0,
-    top3CreatorShare: extras.creators ? { earlier: +extras.creators.earlyTop3.toFixed(3), recent: +extras.creators.lateTop3.toFixed(3) } : null,
-    instagramInterests: extras.igTopics || [],
-  };
-}
-
-function setBusy(logSel, busy) {
-  const form = logSel === '#cwLog' ? $('#cwForm') : $('#askForm');
-  form?.querySelector('button[type=submit]')?.toggleAttribute('disabled', busy);
-}
-function scrollLog(logSel) { const l = $(logSel); if (l) l.scrollTop = l.scrollHeight; }
-function appendSrc(el, text) { const s = document.createElement('span'); s.className = 'src'; s.textContent = text; el.appendChild(s); }
-
-function addMsg(logSel, role, text, src, temp) {
-  const log = $(logSel);
-  if (!log) return { remove() {}, classList: { remove() {} } };
-  const d = document.createElement('div');
-  d.className = `msg ${role}${temp ? ' typing' : ''}`;
-  if (role === 'assistant') d.innerHTML = md(text); else d.textContent = text;
-  if (src) appendSrc(d, src);
-  log.appendChild(d);
-  log.scrollTop = log.scrollHeight;
-  return d;
-}
-
-// Tiny, safe Markdown: escape everything first, then allow bold, italics,
-// inline code, http(s) links, bullet and numbered lists, and paragraphs.
-function md(src) {
-  const inline = (t) => esc(t)
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  // Two levels of lists: indented bullets under a numbered or bulleted item nest inside it.
-  let html = '', top = null, sub = false, liOpen = false;
-  const closeSub = () => { if (sub) { html += '</ul>'; sub = false; } };
-  const closeLi = () => { closeSub(); if (liOpen) { html += '</li>'; liOpen = false; } };
-  const closeTop = () => { closeLi(); if (top) { html += `</${top}>`; top = null; } };
-  for (const raw of String(src).split('\n')) {
-    const line = raw.replace(/\s+$/, '');
-    const m = line.match(/^(\s*)([-*•]|\d+[.)])\s+(.*)/);
-    if (m) {
-      const indented = m[1].length >= 2;
-      const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
-      if (indented && liOpen) {
-        if (!sub) { html += '<ul>'; sub = true; }
-        html += `<li>${inline(m[3])}</li>`;
-        continue;
-      }
-      if (top !== tag) { closeTop(); html += `<${tag}>`; top = tag; } else closeLi();
-      html += `<li>${inline(m[3])}`; liOpen = true;
-      continue;
-    }
-    if (!line.trim()) { closeSub(); continue; }
-    if (top && /^\s{2,}\S/.test(line) && liOpen) { html += ' ' + inline(line.trim()); continue; }
-    closeTop();
-    html += `<p>${inline(line.replace(/^#+\s*/, ''))}</p>`;
-  }
-  closeTop();
-  return html;
-}
-
-
-// Floating assistant: ask anything, anywhere on the page.
-const GENERAL_SUGGEST = ['How does Drift work?', 'How do YouTube recommendations actually work?', 'How do I get my Instagram data?', 'Help me plan a week with less scrolling'];
-function renderSuggest() {
-  const qs = state.analysis ? ['What does my result mean?', 'Which week changed the most?', 'Help me plan next week', 'Is this reliable?'] : GENERAL_SUGGEST;
-  const box = $('#cwSuggest');
-  box.innerHTML = qs.map((q) => `<button type="button">${esc(q)}</button>`).join('');
-  $$('#cwSuggest button').forEach((b) => b.addEventListener('click', () => { box.classList.add('hidden'); ask(b.textContent, '#cwLog'); }));
-}
-const openChat = () => { $('#chatWidget').classList.remove('hidden'); $('#chatFab').classList.add('open'); $('#chatFab').setAttribute('aria-expanded', 'true'); setTimeout(() => $('#cwInput').focus(), 50); };
-const closeChat = () => { $('#chatWidget').classList.add('hidden'); $('#chatFab').classList.remove('open'); $('#chatFab').setAttribute('aria-expanded', 'false'); $('#chatFab').focus(); };
-$('#chatFab').addEventListener('click', openChat);
-$('#chatClose').addEventListener('click', closeChat);
-$('#chatExpand').addEventListener('click', () => { const w = $('#chatWidget'); w.classList.toggle('big'); $('#chatExpand').setAttribute('aria-label', w.classList.contains('big') ? 'Make smaller' : 'Make bigger'); });
-$('#chatNew').addEventListener('click', () => { chats['#cwLog'] = []; $('#cwLog').innerHTML = ''; addMsg('#cwLog', 'assistant', CHAT_HELLO()); $('#cwSuggest').classList.remove('hidden'); renderSuggest(); $('#cwInput').focus(); });
-const CHAT_HELLO = () => state.analysis
-  ? 'Ask me anything — about your result, your habits, or anything else on your mind.'
-  : 'Hi! Ask me anything — how Drift works, how feeds and algorithms work, or anything else. I\'ll answer properly.';
-const cwInput = $('#cwInput');
-const sendCw = () => { const v = cwInput.value; if (!v.trim()) return; cwInput.value = ''; cwInput.style.height = ''; $('#cwSuggest').classList.add('hidden'); ask(v, '#cwLog'); };
-$('#cwForm').addEventListener('submit', (e) => { e.preventDefault(); sendCw(); });
-cwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCw(); } });
-cwInput.addEventListener('input', () => { cwInput.style.height = 'auto'; cwInput.style.height = Math.min(140, cwInput.scrollHeight) + 'px'; });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#chatWidget').classList.contains('hidden')) closeChat(); });
-addMsg('#cwLog', 'assistant', CHAT_HELLO());
-renderSuggest();
-
 // ---------------------------------------------------------------------------
 // Share card — an image of your result to post or send. Made on this device.
 // ---------------------------------------------------------------------------
@@ -919,15 +768,9 @@ renderPastRuns();
 
 // ---------------------------------------------------------------------------
 function showError(title, msg) {
-  goStep(3);
+  goStep(4);
   $('#stepRun').innerHTML = `<div class="error-box"><h3>${esc(title)}</h3><p>${esc(msg)}</p><button class="btn btn-lantern" id="errBack" type="button">Start again</button></div>`;
-  $('#errBack').addEventListener('click', () => goStep(state.platform ? 2 : 1));
+  $('#errBack').addEventListener('click', () => goStep(state.platform ? 3 : 2));
   $('#start').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
 }
 
-let toastT;
-function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600);
-}

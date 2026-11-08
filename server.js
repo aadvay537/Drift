@@ -12,6 +12,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { labelItems, writeReport, chatAboutDrift, agentMode, getHealth } from './agent.js';
+import { addContribution, deleteContribution, allContributions, storageKind } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -43,7 +44,7 @@ app.use('/api', (req, res, next) => {
   if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Access-Control-Max-Age', '86400');
   }
@@ -78,6 +79,7 @@ function rateLimit({ windowMs, max, name }) {
 const limitLabel = rateLimit({ windowMs: 10 * 60 * 1000, max: 8, name: 'analysis' });
 const limitReport = rateLimit({ windowMs: 10 * 60 * 1000, max: 12, name: 'report' });
 const limitChat = rateLimit({ windowMs: 60 * 1000, max: 15, name: 'chat' });
+const limitShare = rateLimit({ windowMs: 10 * 60 * 1000, max: 6, name: 'sharing' });
 // no-store: the browser must re-fetch app.js/normalize.js/bookmarklet source on
 // every load. A cached stale app.js once made a fixed bug look unfixed for a
 // whole day — these files are tiny, so freshness beats caching here.
@@ -96,7 +98,7 @@ app.get('/api/status', (_req, res) => {
 // Detailed AI health for the site owner: model names, last error, cache size.
 // No visitor data is ever in here.
 app.get('/api/health', (_req, res) => {
-  res.json({ mode: agentMode, ...getHealth() });
+  res.json({ mode: agentMode, storage: storageKind, ...getHealth() });
 });
 
 // 1. Labeling. Guard: only {id, title} pairs are accepted — anything else is dropped.
@@ -213,6 +215,87 @@ app.post('/api/chat', limitChat, async (req, res) => {
   } catch (err) {
     console.error('[/api/chat]', err);
     if (!closed) res.end(JSON.stringify({ error: 'chat failed' }) + '\n');
+  }
+});
+
+// 4. Anonymous, opt-in result sharing. The browser only sends this if the
+// person said yes (and, for 13–17s, that a parent agreed). Everything is
+// reshaped here into a fixed set of numbers and labels; anything else is dropped.
+const TYPES = new Set(['escalation', 'narrowing', 'engagement', 'mixed', 'rhythm']);
+const PLATFORMS = new Set(['youtube', 'reddit', 'instagram', 'tiktok']);
+const ACCURACY = new Set(['yes', 'partly', 'no', 'unsure']);
+const AGES = new Set(['18+', '13-17']);
+function shapeContribution(b) {
+  const n = (x, lo = 0, hi = 1e6) => { const v = Number(x); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v * 1000) / 1000)) : null; };
+  if (!b || !TYPES.has(b.type) || !PLATFORMS.has(b.platform) || !AGES.has(b.ageGroup)) return null;
+  return {
+    v: 1,
+    platform: b.platform,
+    type: b.type,
+    score: n(b.score, 0, 100),
+    severity: ['subtle', 'moderate', 'strong', 'flat'].includes(b.severity) ? b.severity : null,
+    percent: n(b.percent, 0, 10000),
+    confidence: ['low', 'medium', 'high'].includes(b.confidence) ? b.confidence : null,
+    coverageDays: n(b.coverageDays, 0, 5000),
+    itemCount: n(b.itemCount, 0, 100000),
+    estimatedDates: !!b.estimatedDates,
+    ageGroup: b.ageGroup,
+    accuracy: ACCURACY.has(b.accuracy) ? b.accuracy : null,
+    lateNightShare: n(b.lateNightShare, 0, 1),
+    top3CreatorShare: b.top3CreatorShare ? { earlier: n(b.top3CreatorShare.earlier, 0, 1), recent: n(b.top3CreatorShare.recent, 0, 1) } : null,
+    topicShift: Array.isArray(b.topicShift) ? b.topicShift.slice(0, 10).map((t) => ({ topic: String(t.topic || '').slice(0, 30), earlyShare: n(t.earlyShare, 0, 1), recentShare: n(t.recentShare, 0, 1) })) : [],
+    weekly: Array.isArray(b.weekly) ? b.weekly.slice(0, 60).map((w) => ({ items: n(w.items, 0, 100000), sessions: n(w.sessions, 0, 10000), intensity: n(w.intensity, 0, 1) })) : [],
+    rules: String(b.rules || '').slice(0, 10),
+  };
+}
+
+app.post('/api/contribute', limitShare, async (req, res) => {
+  try {
+    const data = shapeContribution(req.body);
+    if (!data) return res.status(400).json({ error: 'not a valid summary' });
+    res.json(await addContribution(data));
+  } catch (err) {
+    console.error('[/api/contribute]', err);
+    res.status(500).json({ error: 'could not save' });
+  }
+});
+
+app.delete('/api/contribute/:id', async (req, res) => {
+  try {
+    const ok = await deleteContribution(String(req.params.id).slice(0, 64), String(req.body?.token || '').slice(0, 100));
+    res.status(ok ? 200 : 404).json({ removed: ok });
+  } catch (err) {
+    console.error('[/api/contribute DELETE]', err);
+    res.status(500).json({ error: 'could not remove' });
+  }
+});
+
+// Public totals across everyone who chose to share — counts and averages only.
+app.get('/api/results', async (_req, res) => {
+  try {
+    const rows = await allContributions();
+    const count = (key) => rows.reduce((o, r) => { const k = r[key] ?? 'unknown'; o[k] = (o[k] || 0) + 1; return o; }, {});
+    const avg = (xs) => { const v = xs.filter((x) => typeof x === 'number'); return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 1000) / 1000 : null; };
+    const topicDelta = {};
+    for (const r of rows) for (const t of r.topicShift || []) {
+      if (t.earlyShare == null || t.recentShare == null) continue;
+      (topicDelta[t.topic] ||= []).push(t.recentShare - t.earlyShare);
+    }
+    res.json({
+      total: rows.length,
+      storage: storageKind,
+      byPlatform: count('platform'),
+      byType: count('type'),
+      byAccuracy: count('accuracy'),
+      byAge: count('ageGroup'),
+      averageScore: avg(rows.map((r) => r.score)),
+      averageLateNightShare: avg(rows.map((r) => r.lateNightShare)),
+      topicGrowth: Object.entries(topicDelta).map(([topic, d]) => ({ topic, people: d.length, avgChange: avg(d) })).sort((a, b) => b.avgChange - a.avgChange).slice(0, 8),
+      since: rows[0]?.day || null,
+    });
+  } catch (err) {
+    console.error('[/api/results]', err);
+    res.status(500).json({ error: 'could not load results' });
   }
 });
 

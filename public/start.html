@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Get your report — Drift</title>
+  <meta name="description" content="Get your Drift report in about two minutes." />
+  <meta name="theme-color" content="#061418" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23061418'/%3E%3Cpath d='M10 22c12-8 22 8 44 0M10 34c14-6 24 6 44 0M10 46c16-4 26 4 44 0' stroke='%23F4B740' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="nav scrolled" id="nav">
+    <a class="wordmark" href="index.html" aria-label="Drift home">
+      <svg viewBox="0 0 40 24" aria-hidden="true"><path d="M2 6c9-5 17 5 36 0M2 12c11-4 19 4 36 0M2 18c13-3 21 3 36 0"/></svg>
+      drift
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="start.html">Get your report</a>
+      <a href="how.html">How it works</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="help.html">Help</a>
+    </nav>
+    <span id="modeBadge" class="mode" title="Whether the AI is running"></span>
+    <a href="start.html" class="btn btn-lantern btn-sm nav-cta">Start</a>
+    <details class="menu">
+      <summary aria-label="Menu">Menu</summary>
+      <div class="menu-list">
+        <a href="index.html">Home</a>
+        <a href="start.html">Get your report</a>
+        <a href="how.html">How it works</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="help.html">Help</a>
+        <a href="results.html">Shared results</a>
+      </div>
+    </details>
+  </header>
+
+  <main id="main">
+    <section class="page app" id="start" aria-labelledby="appTitle">
+      <div class="app-head">
+        <h1 id="appTitle">Get your report</h1>
+        <ol class="stepper" id="stepper" aria-label="Progress">
+          <li data-step="1" class="on">Your choice</li>
+          <li data-step="2">Pick your app</li>
+          <li data-step="3">Get your history</li>
+          <li data-step="4">Your report</li>
+        </ol>
+      </div>
+
+      <!-- Step 1: consent questions -->
+      <div class="panel" id="stepConsent">
+        <fieldset class="mcq" id="qShare">
+          <legend>Can Drift keep an anonymous summary of your result to help make it better?</legend>
+          <label class="opt"><input type="radio" name="share" value="yes" /><span><b>Yes, share an anonymous summary</b><small>Only your result and totals. Never your history, video titles, names, or who you are.</small></span></label>
+          <label class="opt"><input type="radio" name="share" value="no" /><span><b>No, keep everything on my device</b><small>You still get your full report. Nothing about it is kept.</small></span></label>
+          <details class="what"><summary>See exactly what would be shared</summary>
+            <ul>
+              <li>Your drift type and score (for example "Escalation, 72")</li>
+              <li>Weekly totals: how many videos and sessions each week</li>
+              <li>How topic shares changed, as percentages</li>
+              <li>How much of your watching was after midnight, as a percentage</li>
+              <li>Your answer to "Did this feel accurate?" and your age group</li>
+            </ul>
+            <p>Never shared: your history file, video titles, creator names, dates and times, your name, or anything that could identify you. You can remove your summary later with one click.</p>
+          </details>
+        </fieldset>
+
+        <fieldset class="mcq hidden" id="qAge">
+          <legend>How old are you?</legend>
+          <label class="opt"><input type="radio" name="age" value="18+" /><span><b>18 or older</b></span></label>
+          <label class="opt"><input type="radio" name="age" value="13-17" /><span><b>13 to 17</b></span></label>
+          <label class="opt"><input type="radio" name="age" value="under13" /><span><b>Under 13</b></span></label>
+        </fieldset>
+
+        <fieldset class="mcq hidden" id="qParent">
+          <legend>Has a parent or guardian said it's OK to share your anonymous summary?</legend>
+          <label class="opt"><input type="radio" name="parent" value="yes" /><span><b>Yes, they've agreed</b></span></label>
+          <label class="opt"><input type="radio" name="parent" value="no" /><span><b>No, or I haven't asked yet</b></span></label>
+        </fieldset>
+
+        <p class="consent-note" id="consentNote" aria-live="polite"></p>
+        <div class="row-end">
+          <button id="consentNext" class="btn btn-lantern btn-lg" type="button" disabled>Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 2: platform -->
+      <div class="panel hidden" id="stepPick">
+        <button class="back" id="backToConsent" type="button">Back</button>
+        <p class="panel-lede">Which app do you want to look at?</p>
+        <div class="platforms">
+          <button class="platform" data-platform="youtube" type="button">
+            <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8c1.6.4 7.8.4 7.8.4s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5.2 3L10 15z"/></svg></span>
+            <span class="p-name">YouTube</span>
+          </button>
+          <button class="platform" data-platform="instagram" type="button">
+            <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.3"/></svg></span>
+            <span class="p-name">Instagram</span>
+          </button>
+          <button class="platform" data-platform="tiktok" type="button">
+            <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16.5 3c.4 2.3 1.9 3.8 4 4v3.1a7 7 0 0 1-4-1.3v6.4A5.8 5.8 0 1 1 10.7 9.4v3.2a2.7 2.7 0 1 0 2.7 2.7V3h3.1z"/></svg></span>
+            <span class="p-name">TikTok</span>
+          </button>
+          <button class="platform" data-platform="reddit" type="button">
+            <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9.3" cy="13" r="1.2"/><circle cx="14.7" cy="13" r="1.2"/><path d="M9.5 16.2c1.5 1 3.5 1 5 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="18" cy="5" r="1.6"/><path d="M12 6.5 13 3l5 2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></span>
+            <span class="p-name">Reddit</span>
+          </button>
+        </div>
+        <div class="pick-foot">
+          <button id="sampleBtn" class="btn btn-quiet" type="button">Not ready? See an example report</button>
+          <div id="pastRuns" class="past hidden"></div>
+        </div>
+      </div>
+
+      <!-- Step 3: how to get history + drop -->
+      <div class="panel hidden" id="stepGet">
+        <button class="back" id="backToPick" type="button">Back</button>
+        <div class="get-layout">
+          <div class="guide" id="guide" aria-live="polite"></div>
+          <div class="drop-col">
+            <div id="drop" class="dropzone" tabindex="0" role="button" aria-label="Choose your history file">
+              <svg class="drop-art" viewBox="0 0 120 60" aria-hidden="true"><path d="M4 18c28-14 52 14 112 0M4 30c32-10 56 10 112 0M4 42c36-6 60 6 112 0"/></svg>
+              <p class="drop-title">Add your file here</p>
+              <p class="drop-sub" id="dropSub">Drag it in, or press the button</p>
+              <span class="btn btn-lantern">Choose my file</span>
+              <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" hidden />
+            </div>
+            <p class="drop-safe">It's read on this device. Nothing is sent until you've seen exactly what will be sent.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: analysing, then the report -->
+      <div class="panel hidden" id="stepRun" aria-live="polite"></div>
+    </section>
+
+  <div id="sendModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sendTitle">
+    <div class="modal-card">
+      <h3 id="sendTitle">Here's exactly what will be sent</h3>
+      <p class="modal-lede" id="sendLede"></p>
+      <div id="sendStats" class="send-stats"></div>
+      <pre id="sendPreview" class="send-preview"></pre>
+      <div class="modal-actions">
+        <button id="sendCancel" class="btn btn-quiet" type="button">Cancel</button>
+        <button id="sendConfirm" class="btn btn-lantern" type="button">Make my report</button>
+      </div>
+    </div>
+  </div>
+  </main>
+
+  <footer class="foot">
+    <span class="wordmark small"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M2 6c9-5 17 5 36 0M2 12c11-4 19 4 36 0M2 18c13-3 21 3 36 0"/></svg>drift</span>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="how.html">How it works</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="help.html">Help</a>
+      <a href="results.html">Shared results</a>
+      <a href="https://github.com/aadvay537/Drift" target="_blank" rel="noopener">Code</a>
+    </nav>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
