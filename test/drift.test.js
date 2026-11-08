@@ -114,5 +114,27 @@ const huge = Array.from({ length: TAKEOUT_MAX_ITEMS + 500 }, (_, i) => ({
 }));
 assert(normalizeHistoryFile(huge).items.length === TAKEOUT_MAX_ITEMS, `huge Takeout capped at newest ${TAKEOUT_MAX_ITEMS}`);
 
+
+// ---- v4: platforms + insights -------------------------------------------
+{
+  const { fromJsonFiles } = await import('../public/platforms.js');
+  const { weeklyTimeline, creatorConcentration, askLocal } = await import('../public/insights.js');
+  const now = Math.floor(Date.now() / 1000);
+  const ig = fromJsonFiles([{ name: 'posts_viewed.json', json: { impressions_history_posts_seen: Array.from({ length: 40 }, (_, i) => ({ string_map_data: { Author: { value: 'c' + (i % 5) }, Time: { timestamp: now - i * 40000 } } })) } }]);
+  if (!(ig.platform === 'instagram' && ig.items.length === 40 && !ig.hasTitles)) { pass = false; console.error("  ✗", 'instagram parsed'); }
+  console.log('  ✓ Instagram posts_viewed parsed (40 items, no titles)');
+  const tt = fromJsonFiles([{ name: 'user_data_tiktok.json', json: { 'Your Activity': { 'Watch History': { VideoList: [{ Date: '2026-10-01 10:00:00', Link: 'x' }, { Date: '2026-10-02 23:00:00', Link: 'y' }] } } } }]);
+  if (!(tt.platform === 'tiktok' && tt.items.length === 2)) { pass = false; console.error("  ✗", 'tiktok parsed'); }
+  console.log('  ✓ TikTok VideoList parsed');
+  let threw = false; try { fromJsonFiles([{ name: 'x.json', json: { nothing: 1 } }]); } catch { threw = true; }
+  if (!(threw)) { pass = false; console.error("  ✗", 'unknown file throws a friendly error'); }
+  console.log('  ✓ unknown file → friendly error');
+  const weeks = weeklyTimeline(ig.items.map((x) => ({ ...x, topic: 'other', intensity: 0.3 })));
+  if (!(weeks.length >= 2 && weeks.reduce((s, w) => s + w.count, 0) === 40)) { pass = false; console.error("  ✗", 'weekly totals add up'); }
+  console.log(`  ✓ weekly timeline: ${weeks.length} weeks, totals add up`);
+  if (!(creatorConcentration(ig.items) !== null)) { pass = false; console.error("  ✗", 'creator concentration computed'); }
+  if (!(typeof askLocal('who do I watch most?', { items: ig.items, weeks, drift: null }) === 'string')) { pass = false; console.error("  ✗", 'local ask answers'); }
+  console.log('  ✓ creator concentration + on-device "ask your data" answers');
+}
 console.log(`\ndrift rules + normalize: ${pass ? 'ALL PASS' : 'FAILURES'} — sample classified as "${a.type}" (+${a.percent}% ${a.metric}), ${a.confidence} confidence, ${a.coverageDays}d`);
 process.exit(pass ? 0 : 1);

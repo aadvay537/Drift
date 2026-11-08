@@ -11,13 +11,54 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { labelItems, writeReport, chatAboutDrift, agentMode } from './agent.js';
+import { labelItems, writeReport, chatAboutDrift, agentMode, getHealth } from './agent.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '2mb' }));
+// Render (and most hosts) sit behind a proxy — trust it so req.ip is the real visitor.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(express.json({ limit: '1mb' }));
+
+// Basic security headers. The page loads its font from Google Fonts only.
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'");
+  next();
+});
+
+// ---------------------------------------------------------------------------
+// Rate limits. The AI endpoints spend real money on the site owner's API key,
+// so each visitor gets a fair allowance per window. In-memory sliding window,
+// no dependencies; fine for a single instance.
+// ---------------------------------------------------------------------------
+function rateLimit({ windowMs, max, name }) {
+  const hits = new Map();
+  setInterval(() => {
+    const cutoff = Date.now() - windowMs;
+    for (const [k, ts] of hits) { const keep = ts.filter((t) => t > cutoff); keep.length ? hits.set(k, keep) : hits.delete(k); }
+  }, windowMs).unref();
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip || 'unknown';
+    const ts = (hits.get(key) || []).filter((t) => t > now - windowMs);
+    if (ts.length >= max) {
+      res.setHeader('Retry-After', Math.ceil((ts[0] + windowMs - now) / 1000));
+      return res.status(429).json({ error: `Too many ${name} requests — please wait a minute.` });
+    }
+    ts.push(now);
+    hits.set(key, ts);
+    next();
+  };
+}
+const limitLabel = rateLimit({ windowMs: 10 * 60 * 1000, max: 8, name: 'analysis' });
+const limitReport = rateLimit({ windowMs: 10 * 60 * 1000, max: 12, name: 'report' });
+const limitChat = rateLimit({ windowMs: 60 * 1000, max: 12, name: 'chat' });
 // no-store: the browser must re-fetch app.js/normalize.js/bookmarklet source on
 // every load. A cached stale app.js once made a fixed bug look unfixed for a
 // whole day — these files are tiny, so freshness beats caching here.
@@ -29,11 +70,18 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 // Tell the frontend whether a real API key is present (affects a small banner only).
 app.get('/api/status', (_req, res) => {
-  res.json({ ok: true, mode: agentMode, version: '3.1.0' });
+  const h = getHealth();
+  res.json({ ok: true, mode: agentMode, health: h.state, version: '4.0.0' });
+});
+
+// Detailed AI health for the site owner: model names, last error, cache size.
+// No visitor data is ever in here.
+app.get('/api/health', (_req, res) => {
+  res.json({ mode: agentMode, ...getHealth() });
 });
 
 // 1. Labeling. Guard: only {id, title} pairs are accepted — anything else is dropped.
-app.post('/api/label', async (req, res) => {
+app.post('/api/label', limitLabel, async (req, res) => {
   try {
     const raw = Array.isArray(req.body?.items) ? req.body.items : [];
     const items = raw
@@ -70,7 +118,7 @@ function shapeDrift(d) {
 }
 
 // 2. Report. Guard: we accept only the small, non-identifying drift summary.
-app.post('/api/report', async (req, res) => {
+app.post('/api/report', limitReport, async (req, res) => {
   try {
     const d = req.body?.drift;
     if (!d || typeof d.type !== 'string') {
@@ -88,7 +136,7 @@ app.post('/api/report', async (req, res) => {
 // analysis it answers general questions; after one it also gets that reader's
 // summary. Same privacy envelope: only the drift summary + the already-written
 // report + the reader's own questions. No raw titles or habit data are accepted.
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', limitChat, async (req, res) => {
   try {
     const b = req.body || {};
     const question = typeof b.question === 'string' ? b.question.slice(0, 500) : '';

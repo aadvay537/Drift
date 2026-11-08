@@ -7,6 +7,15 @@ informs without judging.
 
 This is a working implementation of the [Drift PRD v3.1](./Drift-PRD-v3.1-simple.md).
 
+## What's new in v4
+
+- **Full redesign** — a guided three-step flow (pick your app → get your history → see your drift), new visual identity, mobile-friendly.
+- **Instagram & TikTok** — drop their data download (JSON, even the whole `.zip`). These files have no titles, so Drift shows rhythm, creator concentration and Instagram's own guessed interests — and nothing from them is sent anywhere.
+- **Richer report** — week-by-week chart with the "shift starts" marker, what moved (topic shares), when you watch (24-hour view), who fills your feed.
+- **Ask your data** — questions about your own history (late nights, busiest week, top creators, when it changed) are answered on your device; the rest go to the assistant with only the summary.
+- **Share card** (PNG) and **saved runs** (summary only, in your browser) to compare over time.
+- **Under the hood** — current model names, a fast cheap model for labelling (`DRIFT_LABEL_MODEL`), parallel batches, a shared label cache, per-visitor rate limits, security headers, and an honest `/api/health` so a broken key or model name can't hide behind the demo engine.
+
 ## Quick start
 
 ```bash

@@ -12,11 +12,48 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-const MODEL = process.env.DRIFT_MODEL || 'claude-sonnet-5';
+// Report writer, tone checker and chat use a strong model; labelling hundreds of
+// short titles uses a fast, cheap one. Both are overridable from the environment.
+const MODEL = process.env.DRIFT_MODEL || 'claude-sonnet-5-5';
+const LABEL_MODEL = process.env.DRIFT_LABEL_MODEL || 'claude-haiku-5-5';
 const hasKey = !!process.env.ANTHROPIC_API_KEY;
 const client = hasKey ? new Anthropic() : null;
 
 export const agentMode = hasKey ? 'live' : 'mock';
+
+// ---------------------------------------------------------------------------
+// Health. Every live call reports success or failure here, so a wrong model
+// name or a bad key shows up in /api/status instead of silently falling back
+// to the keyword labeler while the site still claims "live AI".
+// ---------------------------------------------------------------------------
+const health = { ok: 0, failed: 0, lastError: null, lastErrorAt: null, lastOkAt: null };
+function noteOk() { health.ok++; health.lastOkAt = new Date().toISOString(); }
+function noteFail(err) {
+  health.failed++;
+  health.lastError = String(err?.message || err).slice(0, 300);
+  health.lastErrorAt = new Date().toISOString();
+}
+export function getHealth() {
+  if (!hasKey) return { state: 'mock' };
+  const failing = health.lastErrorAt && (!health.lastOkAt || health.lastErrorAt > health.lastOkAt);
+  return { state: failing ? 'failing' : health.ok ? 'healthy' : 'untested', model: MODEL, labelModel: LABEL_MODEL, ...health, cacheSize: labelCache.size };
+}
+
+// Label cache: the same video title gets the same label for everyone, so once a
+// title is labelled we never pay for it again. In-memory, bounded, titles only.
+const labelCache = new Map();
+const CACHE_MAX = 50000;
+const cacheKey = (title) => String(title).toLowerCase().replace(/\s+/g, ' ').trim();
+function cacheGet(title) {
+  const k = cacheKey(title);
+  const v = labelCache.get(k);
+  if (v) { labelCache.delete(k); labelCache.set(k, v); } // refresh recency
+  return v;
+}
+function cacheSet(title, v) {
+  labelCache.set(cacheKey(title), v);
+  if (labelCache.size > CACHE_MAX) labelCache.delete(labelCache.keys().next().value);
+}
 
 // ---------------------------------------------------------------------------
 // Topic vocabulary — fixed, published, auditable. The labeler must map every
@@ -43,26 +80,49 @@ export async function labelItems(items) {
   if (!items?.length) return [];
   if (!hasKey) return items.map((it) => mockLabel(it));
 
-  // Batch to keep each request small and cheap (PRD §9: < $0.15 / analysis).
-  const batches = chunk(items, 40);
-  const out = [];
-  for (const batch of batches) {
-    try {
-      out.push(...(await labelBatchLive(batch)));
-    } catch (err) {
-      // Any failure degrades gracefully to the deterministic labeler.
-      console.warn('[agent] labeler fell back to mock:', err.message);
-      out.push(...batch.map(mockLabel));
-    }
+  // 1. Anything already labelled (by anyone) comes from the cache for free.
+  const out = new Map();
+  const todo = [];
+  for (const it of items) {
+    const hit = cacheGet(it.title);
+    if (hit) out.set(it.id, { id: it.id, ...hit });
+    else todo.push(it);
   }
-  return out;
+
+  // 2. The rest go out in small batches, several at a time (PRD §9: < $0.15 / analysis).
+  const batches = chunk(todo, 40);
+  await mapLimit(batches, 4, async (batch) => {
+    let labels;
+    try {
+      labels = await labelBatchLive(batch);
+      noteOk();
+    } catch (err) {
+      noteFail(err);
+      console.warn('[agent] labeler fell back to keywords:', err.message);
+      labels = batch.map(mockLabel);
+    }
+    labels.forEach((l, i) => {
+      out.set(l.id, l);
+      if (!l.fallback) cacheSet(batch[i].title, { topic: l.topic, intensity: l.intensity });
+    });
+  });
+  return items.map((it) => out.get(it.id) || mockLabel(it));
+}
+
+// Run fn over items with at most `limit` in flight.
+async function mapLimit(items, limit, fn) {
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) { const idx = i++; await fn(items[idx], idx); }
+  });
+  await Promise.all(workers);
 }
 
 async function labelBatchLive(batch) {
   const list = batch.map((it) => `${it.id}\t${it.title}`).join('\n');
   const msg = await client.messages.create({
-    model: MODEL,
-    max_tokens: 3500, // headroom for a thinking block + 40 JSON objects
+    model: LABEL_MODEL,
+    max_tokens: 3500, // headroom for 40 JSON objects
     system:
       'You label short video/post titles for a media-literacy tool. ' +
       'For each line "<id>\\t<title>", output one JSON object ' +
@@ -79,7 +139,7 @@ async function labelBatchLive(batch) {
   const byId = new Map(arr.map((o) => [String(o.id), o]));
   return batch.map((it) => {
     const o = byId.get(String(it.id));
-    if (!o || !TOPICS.includes(o.topic)) return mockLabel(it);
+    if (!o || !TOPICS.includes(o.topic)) return { ...mockLabel(it), fallback: true };
     return { id: it.id, topic: o.topic, intensity: clamp01(Number(o.intensity)) };
   });
 }
@@ -150,6 +210,8 @@ const DRIFT_KB = [
   '- Privacy: your raw file, channel names, handles, and every timestamp stay in your browser. Only cleaned titles and a tiny, non-identifying drift summary are ever sent; the AI service deletes them and never trains on them. Your habit patterns (when and how long you watch) are computed entirely on your device. Before anything is sent, you see exactly what will be sent.',
   '- The EASIEST way to get your history is Google Takeout (takeout.google.com) — no scrolling at all: click "Deselect all", tick only "YouTube and YouTube Music", click "All YouTube data included" and keep only "history", click "Multiple formats" and set History to JSON, then export. Google emails a zip in minutes; inside it, Takeout → YouTube and YouTube Music → history → watch-history.json is the file to drop into Drift. It covers the complete history with exact dates, but has no video durations, so engagement drift can\'t be detected from it (narrowing and escalation work fully).',
   '- The bookmarklet is a bookmark that runs a tiny script: drag it to your bookmarks bar once, open your history page, click it, and scroll gently while its counter shows items and days collected — it saves one small file you drop back on the site. It talks to no server and only reads the page you click it on. It does capture video durations, so it\'s the only path that can detect engagement drift. If it was installed a while ago it should be dragged up again to replace the old copy — a saved bookmark keeps the old script. On mobile you can paste the script into a bookmark, or use the paste-in fallback (which also loses durations).',
+  '- Drift also reads Instagram and TikTok data downloads (JSON format; the whole .zip can be dropped in). Instagram: Settings → Accounts Center → Your information and permissions → Download your information → choose Ads information + Your activity, JSON format. TikTok: Settings and privacy → Account → Download your data → JSON. These downloads have no titles, so Drift shows RHYTHM (how often and when you watch), creator concentration (Instagram), and the interests Instagram has guessed for you — and nothing from those files is sent to the AI, only a short summary.',
+  '- In the report, "Ask your data" answers questions about the reader\'s own history (late-night watching, busiest week, top creators, when it changed) on their device. You only see the summary, so for those specifics, point them to that panel.',
   '- Modes: with an API key Drift uses Claude live; without one it runs a deterministic "demo engine" so everything still works end to end. A badge at the top-right shows which mode is active.',
 ].join('\n');
 
@@ -205,8 +267,10 @@ export async function chatAboutDrift({ drift, report, history = [], question }) 
     if (!text || BANNED.some((w) => lower.includes(w))) {
       return { answer: mockChat(drift, report, q), source: 'fallback' };
     }
+    noteOk();
     return { answer: text, source: 'ai' };
   } catch (err) {
+    noteFail(err);
     console.warn('[agent] chat fell back to mock:', err.message);
     return { answer: mockChat(drift, report, q), source: 'mock' };
   }
@@ -221,6 +285,9 @@ function mockChat(drift, report, q) {
   // ---- General questions (answerable with or without a report) ----
   if (/priv|\bdata\b|\bsent\b|\bsend\b|safe|secure|leak|track|stored?|upload/.test(ql)) {
     return 'Your raw history file, channel names, handles, and every timestamp stay in your browser — they are never uploaded. Only cleaned-up titles and a tiny drift summary reach the AI, which deletes them and never trains on them. Everything about when and how long you watch is worked out on your own device, and you see exactly what will be sent before it goes.';
+  }
+  if (/insta|tiktok|tik tok|reels?\b/.test(ql)) {
+    return 'Yes — Drift reads Instagram and TikTok data downloads too. Instagram: Settings → Accounts Center → Your information and permissions → Download your information, pick "Ads information" and "Your activity", and choose JSON. TikTok: Settings and privacy → Account → Download your data, choose JSON. Drop the .zip straight in. Those files have no titles, so Drift shows your rhythm and (for Instagram) which creators fill your feed — and nothing from them is sent to the AI.';
   }
   // Bookmarklet / getting-started is checked BEFORE the generic "how it works"
   // so "what is the bookmarklet and how do I use it?" lands here.
@@ -288,10 +355,12 @@ export async function writeReport(drift) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const draft = await writeReportLive(drift);
+      noteOk();
       const verdict = await toneCheck(draft);
       if (verdict.pass) return { ...draft, toneChecked: true, source: 'ai' };
       console.warn(`[agent] tone check failed (attempt ${attempt}):`, verdict.reason);
     } catch (err) {
+      noteFail(err);
       console.warn(`[agent] report writer error (attempt ${attempt}):`, err.message);
     }
   }
