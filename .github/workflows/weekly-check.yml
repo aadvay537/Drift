@@ -1,0 +1,32 @@
+# Weekly health check of the live site and AI server (also runnable by hand
+# from the Actions tab). Prints the AI status and the anonymous shared totals,
+# then tests every page, the sample report, consent questions and Ask Drift
+# in a real browser on desktop and phone sizes. A red run means something broke.
+name: Weekly site check
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the AI server
+        run: |
+          for i in $(seq 1 12); do
+            curl -fsS --max-time 30 https://drift-aatp.onrender.com/api/status && exit 0
+            echo " ...still waking ($i)"; sleep 15
+          done
+          echo "::error::AI server did not wake up in 3 minutes"; exit 1
+      - name: AI health
+        run: curl -fsS --max-time 60 https://drift-aatp.onrender.com/api/health | jq .
+      - name: Shared results (anonymous totals)
+        run: curl -fsS --max-time 60 https://drift-aatp.onrender.com/api/results | jq .
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install browser
+        run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      - name: Test the live site
+        run: SITE=https://aadvay537.github.io/Drift/ node scripts/site-check.mjs

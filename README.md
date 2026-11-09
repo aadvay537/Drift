@@ -101,3 +101,14 @@ never sent. All code — including the bookmarklet's full script — is right he
 - **Website:** GitHub Pages, served from the `gh-pages` branch (a copy of `public/`) → https://aadvay537.github.io/Drift/ — loads instantly, never sleeps.
 - **AI server:** Render (`server.js`) → https://drift-aatp.onrender.com. The page wakes it on arrival; if it's slow, a backup engine in the browser finishes the report. A GitHub Action pings it every 10 minutes to keep it awake.
 - To publish website changes: `npm run deploy:pages` (pushes `public/` to `gh-pages`). Server changes still need a Render deploy.
+
+## Weekly site check
+
+`scripts/site-check.mjs` tests the site in a headless browser (every page with no console errors on desktop and phone, the sample report, the consent questions, and a free-form Ask Drift question):
+
+```bash
+SITE=http://localhost:3000/ node scripts/site-check.mjs           # local
+SITE=https://aadvay537.github.io/Drift/ node scripts/site-check.mjs
+```
+
+The **Weekly site check** GitHub Action runs it against the live site every Monday (or by hand from the Actions tab) and also prints `/api/health` and `/api/results` — including `accuracyByPlatform` and `accuracyByType` — in its log.

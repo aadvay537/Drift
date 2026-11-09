@@ -275,6 +275,7 @@ app.get('/api/results', async (_req, res) => {
   try {
     const rows = await allContributions();
     const count = (key) => rows.reduce((o, r) => { const k = r[key] ?? 'unknown'; o[k] = (o[k] || 0) + 1; return o; }, {});
+    const cross = (key) => rows.reduce((o, r) => { const k = r[key] ?? 'unknown', a = r.accuracy ?? 'unknown'; (o[k] ||= {})[a] = (o[k][a] || 0) + 1; return o; }, {});
     const avg = (xs) => { const v = xs.filter((x) => typeof x === 'number'); return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 1000) / 1000 : null; };
     const topicDelta = {};
     for (const r of rows) for (const t of r.topicShift || []) {
@@ -288,6 +289,9 @@ app.get('/api/results', async (_req, res) => {
       byType: count('type'),
       byAccuracy: count('accuracy'),
       byAge: count('ageGroup'),
+      // "Did this feel accurate?" split by app and by drift type, to spot weak spots.
+      accuracyByPlatform: cross('platform'),
+      accuracyByType: cross('type'),
       averageScore: avg(rows.map((r) => r.score)),
       averageLateNightShare: avg(rows.map((r) => r.lateNightShare)),
       topicGrowth: Object.entries(topicDelta).map(([topic, d]) => ({ topic, people: d.length, avgChange: avg(d) })).sort((a, b) => b.avgChange - a.avgChange).slice(0, 8),
