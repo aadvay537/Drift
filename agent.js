@@ -37,7 +37,7 @@ function noteFail(err) {
 export function getHealth() {
   if (!hasKey) return { state: 'mock' };
   const failing = health.lastErrorAt && (!health.lastOkAt || health.lastErrorAt > health.lastOkAt);
-  return { state: failing ? 'failing' : health.ok ? 'healthy' : 'untested', model: MODEL, labelModel: LABEL_MODEL, ...health, cacheSize: labelCache.size };
+  return { state: failing ? 'failing' : health.ok ? 'healthy' : 'untested', model: MODEL, labelModel: LABEL_MODEL, chatModel: CHAT_MODEL, webSearch: WEB_SEARCH, ...health, cacheSize: labelCache.size };
 }
 
 // Label cache: the same video title gets the same label for everyone, so once a
@@ -177,22 +177,39 @@ const DRIFT_KB = [
   '- Modes: with an API key Drift uses Claude live; without one it runs a deterministic "demo engine" so everything still works end to end. A badge at the top-right shows which mode is active.',
 ].join('\n');
 
+// Ask Drift: a full general-purpose assistant that lives inside Drift. It can
+// search the web, read images people attach, and use the person's own
+// (aggregate) report data. The strongest model is used for chat.
+const CHAT_MODEL = process.env.DRIFT_CHAT_MODEL || 'claude-opus-5-5';
+const WEB_SEARCH = process.env.DRIFT_WEB_SEARCH !== 'off';
+
 const CHAT_SYSTEM =
-  "You are Drift's assistant, built into a media-literacy website. You are a genuinely capable, knowledgeable " +
-  'assistant: answer ANY question the person asks fully and directly — about Drift, their own results, how social ' +
-  'media and recommendation algorithms work, screen time, studying, habits, or anything else at all (general ' +
-  'knowledge, maths, writing help, advice). Never refuse a reasonable question just because it is off-topic, and never ' +
-  'tell them to "steer back". Be specific and practical; give real explanations, examples and steps.\n\n' +
-  'FORMAT: Use light Markdown when it helps — short paragraphs, **bold** for key terms, and "-" bullet lists or ' +
-  '"1." numbered steps. No headings, no tables. Match length to the question: a quick fact gets a sentence or two; ' +
-  '"how" or "help me plan" questions get a fuller answer.\n\n' +
-  "WHEN TALKING ABOUT THE PERSON'S OWN DATA OR RESULT (Drift's \"mirror, not a filter\" promise): ground every " +
-  'claim in the report and the on-device statistics provided below and never invent numbers; describe patterns, not ' +
-  'proof — never claim an algorithm CAUSED their behaviour; never compare them to other people; never diagnose them ' +
-  'or label them (e.g. never call them addicted); no guilt-tripping. Discussing these topics in general (for example, ' +
-  'why short videos are designed to be compelling) is completely fine — just be balanced and accurate. If they ask ' +
-  "something their data can't show (why it happened, who they are), say plainly that Drift only sees patterns in what " +
-  'they watched.\n\n' + DRIFT_KB;
+  "You are Ask Drift, the AI assistant inside Drift (a website that helps people understand how their social media " +
+  'feeds change). You are a fully capable general assistant, as capable as a top AI model: answer ANY question the ' +
+  'person asks, thoroughly and accurately — general knowledge, current events, news, sport, science, maths (show the ' +
+  'working), coding (give working code), writing and editing, homework help (explain, don\'t just give answers), ' +
+  'study plans, health and wellbeing information, technology help, recommendations, translations, and of course ' +
+  'Drift, social media, algorithms and screen time. Never refuse or deflect a reasonable question because it is ' +
+  'off-topic, and never tell people to "steer back" to Drift.\n\n' +
+  'TOOLS: You can search the web. Use it whenever the answer depends on anything current or that may have changed — ' +
+  'news, prices, scores, weather, app settings and menus, laws, people\'s current roles, product versions, "latest" ' +
+  'anything — or when you are not sure. Do not search for things you know well that do not change. When you use search ' +
+  'results, say where the information came from in plain words. If people attach images (screenshots, photos, ' +
+  'homework), look at them carefully and use what they show.\n\n' +
+  'STYLE: Warm, clear and direct. Start with the answer, then the detail. Use Markdown when it helps: short paragraphs, ' +
+  '**bold** for key points, "-" bullet lists, "1." numbered steps, ```code blocks``` for code, and simple tables when ' +
+  'comparing things. Keep quick questions short; give fuller answers to "how", "why", "explain" and "help me plan". ' +
+  'Write for everyone, including older people and non-native English speakers: plain words, no jargon unless asked. ' +
+  'If the person writes in another language (for example Hindi or Hinglish), reply in that language.\n\n' +
+  'SAFETY: Be honest about uncertainty. For serious medical, legal or financial situations, give useful general ' +
+  'information and suggest a professional. If someone seems to be in danger or crisis, respond with care and point ' +
+  'them to emergency help (in India: 112; Tele-MANAS mental health helpline 14416).\n\n' +
+  "THE PERSON'S OWN DRIFT DATA (Drift's \"mirror, not a filter\" promise): ground every claim about them in the " +
+  'report and statistics provided below and never invent numbers; describe patterns, not proof — never claim an ' +
+  'algorithm CAUSED their behaviour; never compare them to other people; never diagnose or label them (never call ' +
+  'them addicted); no guilt-tripping. When they want to change something, be genuinely helpful: give concrete, ' +
+  'specific steps, including exact app settings (search to confirm current menus if unsure). Discussing these topics ' +
+  'in general is completely fine — just be balanced and accurate.\n\n' + DRIFT_KB;
 
 // The small, aggregate, non-identifying statistics the browser may share so the
 // assistant can answer data questions: weekly totals, topic shares, hour-of-day
@@ -206,48 +223,83 @@ function contextBlock(drift, report, stats) {
     (stats ? '\n\nON-DEVICE STATISTICS (aggregates computed in their browser):\n' + JSON.stringify(stats) : '');
 }
 
-function chatMessages(history, q) {
+function chatMessages(history, q, images = []) {
+  const userContent = images.length
+    ? [...images.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } })), { type: 'text', text: q || 'What is in this image?' }]
+    : q;
   return [
     ...history
       .filter((m) => m && typeof m.content === 'string' && m.content.trim())
-      .slice(-12)
-      .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 4000) })),
-    { role: 'user', content: q },
+      .slice(-16)
+      .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 6000) })),
+    { role: 'user', content: userContent },
   ];
 }
 
-/**
- * Answer one question, streaming text as it is written.
- * drift/report/stats are OPTIONAL — before an analysis it answers generally.
- * @param {object} p
- * @param {(chunk:string)=>void} [onText]  called with each piece of text as it arrives
- * @returns {Promise<{answer:string, source:string}>}
- */
-export async function chatAboutDrift({ drift, report, stats = null, history = [], question }, onText = () => {}) {
-  const q = String(question || '').trim();
-  if (!q) { const a = 'Ask me anything — about Drift, your report, or anything else.'; onText(a); return { answer: a, source: 'mock' }; }
-  if (!hasKey) { const a = mockChat(drift, report, q); onText(a); return { answer: a, source: 'mock' }; }
+function nowBlock(now, tz) {
+  const d = Number.isFinite(Date.parse(now)) ? new Date(now) : new Date();
+  let zone = 'Asia/Kolkata';
+  try { if (tz) { new Intl.DateTimeFormat('en', { timeZone: tz }); zone = tz; } } catch { /* bad tz */ }
+  const local = d.toLocaleString('en-GB', { timeZone: zone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return `\n\nCURRENT DATE AND TIME: ${local} (${zone}); ${d.toISOString()} UTC. Use this for anything about "today", ages, countdowns, or what is recent.`;
+}
 
+/**
+ * Answer one question, streaming as it is written.
+ * @param {object} p  drift/report/stats optional; images optional [{media_type, data(base64)}]
+ * @param {(ev:object)=>void} [emit]  receives {t:text} chunks, {s:'searching', q} status, {sources:[...]} at the end
+ * @returns {Promise<{answer:string, source:string, sources:Array}>}
+ */
+export async function chatAboutDrift({ drift, report, stats = null, history = [], question, images = [], now, tz }, emit = () => {}) {
+  const onText = (t) => emit({ t });
+  const q = String(question || '').trim();
+  if (!q && !images.length) { const a = 'Ask me anything — about your feed, your report, or anything else at all.'; onText(a); return { answer: a, source: 'mock', sources: [] }; }
+  if (!hasKey) { const a = mockChat(drift, report, q); onText(a); return { answer: a, source: 'mock', sources: [] }; }
+
+  const system = CHAT_SYSTEM + nowBlock(now, tz) + contextBlock(drift, report, stats);
   let text = '';
+  const sources = new Map();
+  // First try: strongest model + web search. If that fails before any text
+  // arrives, retry once with the standard model and no tools.
+  for (const attempt of [{ model: CHAT_MODEL, search: WEB_SEARCH }, { model: MODEL, search: false }]) {
+  const tools = attempt.search ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }] : undefined;
+  let messages = chatMessages(history, q, images);
   try {
-    const stream = client.messages.stream({
-      model: MODEL,
-      max_tokens: 1800,
-      system: CHAT_SYSTEM + contextBlock(drift, report, stats),
-      messages: chatMessages(history, q),
-    });
-    stream.on('text', (t) => { text += t; onText(t); });
-    await stream.finalMessage();
+    // Long searches can pause mid-turn; continue up to a few times.
+    for (let round = 0; round < 4; round++) {
+      const stream = client.messages.stream({ model: attempt.model, max_tokens: 4096, system, messages, ...(tools ? { tools } : {}) });
+      stream.on('text', (t) => { text += t; onText(t); });
+      stream.on('streamEvent', (ev) => {
+        if (ev.type === 'content_block_start' && ev.content_block?.type === 'server_tool_use') emit({ s: 'searching' });
+      });
+      const msg = await stream.finalMessage();
+      for (const block of msg.content || []) {
+        if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
+          for (const r of block.content) if (r.url && !sources.has(r.url)) sources.set(r.url, { url: r.url, title: r.title || r.url });
+        }
+        if (block.type === 'text' && Array.isArray(block.citations)) {
+          for (const c of block.citations) if (c.url) sources.set(c.url, { url: c.url, title: c.title || c.url, cited: true });
+        }
+      }
+      if (msg.stop_reason !== 'pause_turn') break;
+      messages = [...messages, { role: 'assistant', content: msg.content }];
+    }
     noteOk();
-    return { answer: text.trim(), source: 'ai' };
+    // Prefer sources the answer actually cited; otherwise the top results.
+    const all = [...sources.values()];
+    const cited = all.filter((x) => x.cited);
+    const list = (cited.length ? cited : all).slice(0, 6).map(({ url, title }) => ({ url, title }));
+    if (list.length) emit({ sources: list });
+    return { answer: text.trim(), source: 'ai', sources: list };
   } catch (err) {
     noteFail(err);
-    console.warn('[agent] chat error:', err.message);
-    if (text) return { answer: text.trim(), source: 'ai-partial' };
-    const a = mockChat(drift, report, q);
-    onText(a);
-    return { answer: a, source: 'mock' };
+    console.warn(`[agent] chat error (${attempt.model}${attempt.search ? ' + search' : ''}):`, err.message);
+    if (text) return { answer: text.trim(), source: 'ai-partial', sources: [] };
   }
+  }
+  const a = mockChat(drift, report, q);
+  onText(a);
+  return { answer: a, source: 'mock', sources: [] };
 }
 
 // Deterministic assistant — used with no API key and as the live fallback.

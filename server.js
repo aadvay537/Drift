@@ -21,7 +21,10 @@ const PORT = process.env.PORT || 3000;
 // Render (and most hosts) sit behind a proxy — trust it so req.ip is the real visitor.
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
-app.use(express.json({ limit: '1mb' }));
+// Chat may carry a few attached photos (resized in the browser); everything else is small.
+const jsonSmall = express.json({ limit: '1mb' });
+const jsonChat = express.json({ limit: '12mb' });
+app.use((req, res, next) => (req.path === '/api/chat' ? jsonChat : jsonSmall)(req, res, next));
 
 // Basic security headers. The page loads its font from Google Fonts only.
 app.use((_req, res, next) => {
@@ -78,7 +81,7 @@ function rateLimit({ windowMs, max, name }) {
 }
 const limitLabel = rateLimit({ windowMs: 10 * 60 * 1000, max: 8, name: 'analysis' });
 const limitReport = rateLimit({ windowMs: 10 * 60 * 1000, max: 12, name: 'report' });
-const limitChat = rateLimit({ windowMs: 60 * 1000, max: 15, name: 'chat' });
+const limitChat = rateLimit({ windowMs: 60 * 1000, max: 20, name: 'chat' });
 const limitShare = rateLimit({ windowMs: 10 * 60 * 1000, max: 6, name: 'sharing' });
 // no-store: the browser must re-fetch app.js/normalize.js/bookmarklet source on
 // every load. A cached stale app.js once made a fixed bug look unfixed for a
@@ -179,8 +182,12 @@ function shapeStats(st) {
 
 app.post('/api/chat', limitChat, async (req, res) => {
   const b = req.body || {};
-  const question = typeof b.question === 'string' ? b.question.slice(0, 2000) : '';
-  if (!question.trim()) return res.status(400).json({ error: 'empty question' });
+  const question = typeof b.question === 'string' ? b.question.slice(0, 8000) : '';
+  const IMG_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+  const images = Array.isArray(b.images)
+    ? b.images.filter((im) => im && IMG_TYPES.has(im.media_type) && typeof im.data === 'string' && im.data.length < 4_000_000).slice(0, 4)
+    : [];
+  if (!question.trim() && !images.length) return res.status(400).json({ error: 'empty question' });
 
   const d = b.drift;
   const drift = d && typeof d.type === 'string' ? shapeDrift(d) : null;
@@ -197,8 +204,8 @@ app.post('/api/chat', limitChat, async (req, res) => {
   const history = Array.isArray(b.history)
     ? b.history
         .filter((m) => m && typeof m.content === 'string')
-        .slice(-12)
-        .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 4000) }))
+        .slice(-16)
+        .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content.slice(0, 6000) }))
     : [];
 
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
@@ -208,8 +215,12 @@ app.post('/api/chat', limitChat, async (req, res) => {
   let closed = false;
   res.on('close', () => { closed = true; });
   try {
-    const result = await chatAboutDrift({ drift, report, stats, history, question }, (t) => {
-      if (!closed) res.write(JSON.stringify({ t }) + '\n');
+    const result = await chatAboutDrift({
+      drift, report, stats, history, question, images,
+      now: typeof b.now === 'string' ? b.now.slice(0, 40) : undefined,
+      tz: typeof b.tz === 'string' ? b.tz.slice(0, 60) : undefined,
+    }, (ev) => {
+      if (!closed) res.write(JSON.stringify(ev) + '\n');
     });
     if (!closed) res.end(JSON.stringify({ done: true, source: result.source }) + '\n');
   } catch (err) {

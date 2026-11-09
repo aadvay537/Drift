@@ -11,7 +11,7 @@
     "deploy:pages": "git subtree split --prefix public -b gh-pages-tmp && git push -f origin gh-pages-tmp:gh-pages && git branch -D gh-pages-tmp"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "^1.6.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "pg": "^8.23.1"
