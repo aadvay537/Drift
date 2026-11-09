@@ -49,7 +49,7 @@ for (const [label, opts] of [['desktop', { viewport: { width: 1280, height: 860 
     const done = await page.locator('.dial').first().waitFor({ timeout: 90000 }).then(() => true).catch(() => false);
     const text = done ? await page.locator('#stepRun').innerText() : '';
     if (!done) bad('sample report never appeared');
-    else if (!/example report, so nothing is shared/i.test(text)) bad('sample report does not say nothing is shared');
+    else if (await page.locator('#shareTile').count()) bad('sample report offers to share (it must not)');
     else ok('sample report renders and shares nothing');
     if (errors.length) bad('sample console errors → ' + errors.slice(0, 3).join(' | '));
   });
@@ -66,13 +66,13 @@ await withPage(browser, {}, async (page) => {
   });
   await pick('share', 'yes'); await pick('age', 'under13');
   let s = await state();
-  s.enabled && /device only/i.test(s.note) ? ok('under-13 → nothing shared') : bad('under-13 consent: ' + JSON.stringify(s));
+  s.enabled && /nothing/i.test(s.note) ? ok('under-13 → nothing shared') : bad('under-13 consent: ' + JSON.stringify(s));
   await pick('age', '13-17');
   s = await state();
   !s.enabled && s.parentShown ? ok('13–17 asks for a parent') : bad('13–17 did not ask for parent: ' + JSON.stringify(s));
   await pick('parent', 'no');
   s = await state();
-  s.enabled && /device only/i.test(s.note) ? ok('13–17 without parent → nothing shared') : bad('13–17 no parent: ' + JSON.stringify(s));
+  s.enabled && /nothing/i.test(s.note) ? ok('13–17 without parent → nothing shared') : bad('13–17 no parent: ' + JSON.stringify(s));
   await page.click('#consentNext');
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('drift.consent.v1')));
   stored && stored.share === false ? ok('saved choice is share:false') : bad('saved consent was ' + JSON.stringify(stored));
@@ -82,17 +82,17 @@ console.log('\nAsk Drift (free-form)');
 await withPage(browser, {}, async (page) => {
   await page.goto(SITE + 'index.html', { waitUntil: 'domcontentloaded' });
   await page.click('#chatFab');
-  await page.fill('#cwInput', 'In one sentence, what is a recommendation algorithm?');
-  await page.press('#cwInput', 'Enter');
-  const last = page.locator('#cwLog .msg, #cwLog > *').last();
+  await page.fill('#cwBody [data-input]', 'In one sentence, what is a recommendation algorithm?');
+  await page.press('#cwBody [data-input]', 'Enter');
+  const last = page.locator('#cwBody [data-log] .msg').last();
   let answer = '';
   for (let i = 0; i < 90 && !answer; i++) {
     await page.waitForTimeout(2000);
     const t = (await last.innerText().catch(() => '')).trim();
-    if (t && !/waking|starting up/i.test(t) && !(await page.locator('#cwLog .dots').count())) answer = t;
+    if (t && !/waking|starting up/i.test(t) && !(await page.locator('#cwBody [data-log] .dots').count())) answer = t;
   }
   if (!answer) bad('chat never answered');
-  else if (/couldn.t be reached|still starting up|a lot of questions/i.test(answer)) bad('chat error: ' + answer.slice(0, 120));
+  else if (/couldn.t be reached|still starting up|a lot of questions|free AI/i.test(answer)) bad('chat error: ' + answer.slice(0, 120));
   else ok('chat answered: ' + answer.replace(/\s+/g, ' ').slice(0, 100));
 });
 

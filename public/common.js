@@ -96,8 +96,8 @@ document.body.insertAdjacentHTML('beforeend', `
   <div id="toast" class="toast" role="status" aria-live="polite"></div>`);
 
 export const HELLO = () => (ctx.analysis || latestReport())
-  ? 'Hi! Ask me anything — about your report, your habits, or **anything else at all**. I can search the web, read screenshots and photos, help with homework or code, and more.'
-  : 'Hi! I\'m **Ask Drift**. Ask me anything — how feeds and algorithms work, today\'s news, homework, maths, writing, advice, or how to use Drift. I can search the web and read photos and screenshots too.';
+  ? 'Hi! Ask me anything — about your report, or anything else.'
+  : 'Hi! Ask me anything.';
 const GENERAL_SUGGEST = ['What happened in the news today?', 'How does the Instagram algorithm decide what I see?', 'Help me plan a week with less scrolling', 'How do I download my YouTube history on iPhone?'];
 const REPORT_SUGGEST = ['What does my result mean?', 'Make me a plan for next week', 'Which week changed the most?', 'How do I reset my feed?'];
 

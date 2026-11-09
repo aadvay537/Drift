@@ -57,54 +57,38 @@
       <!-- Step 1: consent questions -->
       <div class="panel" id="stepConsent">
         <fieldset class="mcq" id="qShare">
-          <legend>Can Drift keep an anonymous summary of your result to help make it better?</legend>
-          <label class="opt"><input type="radio" name="share" value="yes" /><span><b>Yes, share an anonymous summary</b><small>Only your result and totals. Never your history, video titles, names, or who you are.</small></span></label>
-          <label class="opt"><input type="radio" name="share" value="no" /><span><b>No, keep everything on my device</b><small>You still get your full report. Nothing about it is kept.</small></span></label>
-          <details class="what"><summary>See exactly what would be shared</summary>
-            <ul>
-              <li>Your drift type and score (for example "Escalation, 72")</li>
-              <li>Weekly totals: how many videos and sessions each week</li>
-              <li>How topic shares changed, as percentages</li>
-              <li>How much of your watching was after midnight, as a percentage</li>
-              <li>Your answer to "Did this feel accurate?" and your age group</li>
-            </ul>
-            <p>Never shared: your history file, video titles, creator names, dates and times, your name, or anything that could identify you. You can remove your summary later with one click.</p>
+          <legend>Share an anonymous summary to help improve Drift?</legend>
+          <label class="opt"><input type="radio" name="share" value="yes" /><span><b>Yes, anonymously</b></span></label>
+          <label class="opt"><input type="radio" name="share" value="no" /><span><b>No, keep it private</b></span></label>
+          <details class="more-info"><summary>What's shared?</summary>
+            <p>Only your result and totals — type, score, weekly counts, topic percentages, and whether it felt accurate. Never your history, titles, names or dates. You can remove it later.</p>
           </details>
         </fieldset>
-
         <fieldset class="mcq hidden" id="qAge">
-          <legend>How old are you?</legend>
-          <label class="opt"><input type="radio" name="age" value="18+" /><span><b>18 or older</b></span></label>
-          <label class="opt"><input type="radio" name="age" value="13-17" /><span><b>13 to 17</b></span></label>
-          <label class="opt"><input type="radio" name="age" value="under13" /><span><b>Under 13</b></span></label>
+          <legend>Your age</legend>
+          <div class="opt-row">
+            <label class="opt"><input type="radio" name="age" value="18+" /><span><b>18+</b></span></label>
+            <label class="opt"><input type="radio" name="age" value="13-17" /><span><b>13–17</b></span></label>
+            <label class="opt"><input type="radio" name="age" value="under13" /><span><b>Under 13</b></span></label>
+          </div>
         </fieldset>
-
         <fieldset class="mcq hidden" id="qParent">
-          <legend>Has a parent or guardian said it's OK to share your anonymous summary?</legend>
-          <label class="opt"><input type="radio" name="parent" value="yes" /><span><b>Yes, they've agreed</b></span></label>
-          <label class="opt"><input type="radio" name="parent" value="no" /><span><b>No, or I haven't asked yet</b></span></label>
+          <legend>Has a parent said it's OK?</legend>
+          <div class="opt-row">
+            <label class="opt"><input type="radio" name="parent" value="yes" /><span><b>Yes</b></span></label>
+            <label class="opt"><input type="radio" name="parent" value="no" /><span><b>Not yet</b></span></label>
+          </div>
         </fieldset>
-
-        <p class="consent-note" id="consentNote" aria-live="polite"></p>
-        <div class="row-end">
+        <div class="row-between">
+          <p class="consent-note" id="consentNote" aria-live="polite"></p>
           <button id="consentNext" class="btn btn-lantern btn-lg" type="button" disabled>Continue</button>
         </div>
       </div>
 
-      <!-- Step 2: platform -->
+      <!-- Step 2: how to start -->
       <div class="panel hidden" id="stepPick">
         <button class="back" id="backToConsent" type="button">Back</button>
-        <div class="quick-ways">
-          <button class="quick" data-platform="screentime" type="button">
-            <span class="q-icon" aria-hidden="true">⏱️</span>
-            <span><b>Quickest: one Screen Time screenshot</b><small>Works on any phone. About 1 minute, no downloads. Shows your time per app and gives you a plan.</small></span>
-          </button>
-          <button class="quick" data-platform="youtube" data-tab="Screenshots" type="button">
-            <span class="q-icon" aria-hidden="true">📸</span>
-            <span><b>Easy: screenshots of your YouTube history</b><small>Take 5–10 screenshots in the YouTube app. They're read on your phone and never uploaded.</small></span>
-          </button>
-        </div>
-        <p class="panel-lede">Or get your full history from an app:</p>
+        <p class="panel-lede">Pick an app</p>
         <div class="platforms">
           <button class="platform" data-platform="youtube" type="button">
             <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8c1.6.4 7.8.4 7.8.4s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5.2 3L10 15z"/></svg></span>
@@ -123,8 +107,12 @@
             <span class="p-name">Reddit</span>
           </button>
         </div>
+        <button class="quick" data-platform="screentime" type="button">
+          <span class="q-icon" aria-hidden="true">⏱️</span>
+          <span><b>Or: quick Screen Time check</b><small>1 screenshot · 1 minute</small></span>
+        </button>
         <div class="pick-foot">
-          <button id="sampleBtn" class="btn btn-quiet" type="button">Not ready? See an example report</button>
+          <button id="sampleBtn" class="linkish" type="button">See an example report</button>
           <div id="pastRuns" class="past hidden"></div>
         </div>
       </div>
@@ -142,7 +130,7 @@
               <span class="btn btn-lantern" id="dropBtn">Choose my file</span>
               <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip,image/*" multiple hidden />
             </div>
-            <p class="drop-safe">It's read on this device. Nothing is sent until you've seen exactly what will be sent.</p>
+            <p class="drop-safe">You'll see exactly what's sent first.</p>
           </div>
         </div>
       </div>
@@ -157,6 +145,7 @@
       <p class="modal-lede" id="sendLede"></p>
       <div id="sendStats" class="send-stats"></div>
       <pre id="sendPreview" class="send-preview"></pre>
+      <div id="sendThumbs" class="send-thumbs hidden"></div>
       <div class="modal-actions">
         <button id="sendCancel" class="btn btn-quiet" type="button">Cancel</button>
         <button id="sendConfirm" class="btn btn-lantern" type="button">Make my report</button>

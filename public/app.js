@@ -6,7 +6,7 @@ import { readHistoryFile } from './platforms.js';
 import { keywordLabel } from './labeler.js';
 import { weeklyTimeline, turningPoint, creatorConcentration, hourProfile, topicShift, topicName } from './insights.js';
 import { $, $$, esc, pct, reduceMotion, ctx, API, server, waitForServer, postJSON, toast } from './common.js';
-import { ChatView, chatBoxHTML, saveLatestReport } from './chat.js';
+import { ChatView, chatBoxHTML, saveLatestReport, prepImage } from './chat.js';
 import { planTile, wirePlan, planFromAnalysis } from './plan.js';
 import { readImages, youtubeTextFromScreens, parseScreenTime, fmtMin } from './ocr.js';
 import { saveLatestContext } from './chat.js';
@@ -63,11 +63,11 @@ function readConsentForm() {
   $('#qParent').classList.toggle('hidden', !(share === 'yes' && age === '13-17'));
   const note = $('#consentNote');
   let ready = false, result = null;
-  if (share === 'no') { ready = true; result = { share: false }; note.textContent = 'Got it. Nothing about your report will be kept.'; }
-  else if (share === 'yes' && age === '18+') { ready = true; result = { share: true, ageGroup: '18+' }; note.textContent = 'Thank you. After your report, you\'ll be asked one quick question before anything is shared.'; }
-  else if (share === 'yes' && age === 'under13') { ready = true; result = { share: false }; note.textContent = 'Thanks for telling us. Drift doesn\'t keep anything for under-13s, so your report will stay on your device only.'; }
-  else if (share === 'yes' && age === '13-17' && parent === 'yes') { ready = true; result = { share: true, ageGroup: '13-17' }; note.textContent = 'Thank you. After your report, you\'ll be asked one quick question before anything is shared.'; }
-  else if (share === 'yes' && age === '13-17' && parent === 'no') { ready = true; result = { share: false }; note.textContent = 'No problem. Your report will stay on your device only. You can share another time once a parent agrees.'; }
+  if (share === 'no') { ready = true; result = { share: false }; note.textContent = 'Nothing will be kept.'; }
+  else if (share === 'yes' && age === '18+') { ready = true; result = { share: true, ageGroup: '18+' }; note.textContent = 'Thank you!'; }
+  else if (share === 'yes' && age === 'under13') { ready = true; result = { share: false }; note.textContent = 'Nothing is kept for under-13s.'; }
+  else if (share === 'yes' && age === '13-17' && parent === 'yes') { ready = true; result = { share: true, ageGroup: '13-17' }; note.textContent = 'Thank you!'; }
+  else if (share === 'yes' && age === '13-17' && parent === 'no') { ready = true; result = { share: false }; note.textContent = 'No problem — nothing will be kept.'; }
   else note.textContent = '';
   $('#consentNext').disabled = !ready;
   return result;
@@ -95,83 +95,48 @@ if (new URLSearchParams(location.search).has('sample')) loadSample();
 // ---------------------------------------------------------------------------
 // Per-platform guides. One clear recommended route, alternatives in tabs.
 // ---------------------------------------------------------------------------
+// Short steps for each app. Extra detail sits in a "More info" dropdown.
+const more = (t) => `<details class="more-info"><summary>More info</summary><p>${t}</p></details>`;
+const steps = (...xs) => `<ol class="howto">${xs.map((x) => `<li><span>${x}</span></li>`).join('')}</ol>`;
+const SHOT_LOCAL = more('Your screenshots are read on your phone and never uploaded. Only the video titles go to the AI, after you\'ve seen them. Dates are estimated if the screenshots don\'t show them.');
+const SHOT_AI = more('These screenshots show pictures, not titles, so they are sent to the AI to recognise what kind of videos they are. You\'ll see a preview first. They\'re deleted straight after, and the AI is told to ignore names.');
 const GUIDES = {
   youtube: {
-    title: 'Get your YouTube history',
-    sub: 'Pick whichever is easier. On a phone, screenshots are quickest. Google Takeout covers everything.',
+    title: 'YouTube',
     tabs: {
-      'Screenshots': `
-        <ol class="howto">
-          <li><span>Open the <strong>YouTube app</strong> and tap <strong>You</strong> (bottom right).</span></li>
-          <li><span>Next to <strong>History</strong>, tap <strong>View all</strong>.</span></li>
-          <li><span>Take a screenshot, scroll down, take another. <strong>5 to 10 screenshots</strong> is great. (iPhone: press the <strong>side button + volume up</strong> together.)</span></li>
-          <li><span>Come back here, tap <strong>Choose my screenshots</strong> and select them all.</span></li>
-        </ol>
-        <p class="note">The screenshots are read <strong>on your phone</strong> and never uploaded. Only the video titles go to the AI, after you've seen them. Screenshots don't show exact dates, so your report's timeline is estimated.</p>`,
-      'Google Takeout': `
-        <ol class="howto">
-          <li><span>Open <a href="https://takeout.google.com/settings/takeout/custom/youtube" target="_blank" rel="noopener">this Google Takeout link</a> — it opens with only YouTube selected. (If it doesn't, click <strong>Deselect all</strong> and tick <strong>YouTube and YouTube Music</strong>.)</span></li>
-          <li><span>Click <strong>All YouTube data included</strong> and keep only <strong>history</strong>. Then click <strong>Multiple formats</strong> and set History to <strong>JSON</strong>.</span></li>
-          <li><span>Click <strong>Next step</strong>, then <strong>Create export</strong>. Google emails you a link, usually within minutes.</span></li>
-          <li><span>Drop the downloaded <strong>.zip</strong> straight into the box. No need to unzip it.</span></li>
-        </ol>
-        <p class="note">Takeout doesn't include video lengths, so "shorter videos, more often" can't be measured this way. Everything else works fully.</p>`,
+      'Screenshots': steps('YouTube app → <strong>You</strong> → <strong>History</strong> → <strong>View all</strong>', 'Screenshot, scroll, repeat — <strong>5–10</strong> is great', 'Tap <strong>Choose</strong> and pick them all') + SHOT_LOCAL,
+      'Google Takeout': steps('Open <a href="https://takeout.google.com/settings/takeout/custom/youtube" target="_blank" rel="noopener">Google Takeout</a> (YouTube is pre-selected)', 'Keep only <strong>history</strong>, format <strong>JSON</strong>', '<strong>Create export</strong>, then add the .zip here') + more('Google emails the file, usually within minutes. You don\'t need to unzip it. Takeout has no video lengths, so "shorter videos" can\'t be measured — everything else works.'),
       'Quick grab': 'BOOKMARKLET',
-      'Copy & paste': 'PASTE',
+      'Paste': 'PASTE',
     },
-  },
-  reddit: {
-    title: 'Get your Reddit history',
-    sub: 'Use the quick grab on your profile, or copy and paste the page.',
-    tabs: { 'Quick grab': 'BOOKMARKLET', 'Copy & paste': 'PASTE' },
   },
   instagram: {
-    title: 'Get your Instagram history',
-    sub: 'Instagram lets you download your own activity. Ask for JSON, and Drift reads it right here.',
+    title: 'Instagram',
     tabs: {
-      'Download your information': `
-        <ol class="howto">
-          <li><span>Open <a href="https://accountscenter.instagram.com/info_and_permissions/dyi/" target="_blank" rel="noopener">Instagram's download page</a> (or in the app: <strong>Settings</strong> → <strong>Accounts Center</strong> → <strong>Your information and permissions</strong> → <strong>Download your information</strong>).</span></li>
-          <li><span>Choose <strong>Download or transfer information</strong>, and pick your Instagram account.</span></li>
-          <li><span>Choose <strong>Some of your information</strong> and tick <strong>Ads information</strong> (it holds "posts viewed" and "videos watched") and <strong>Your activity</strong>.</span></li>
-          <li><span>Choose <strong>Download to device</strong>, set the date range to <strong>Last month</strong> or longer, and set Format to <strong>JSON</strong>.</span></li>
-          <li><span>When Instagram emails you, download the <strong>.zip</strong> and drop it straight into the box.</span></li>
-        </ol>
-        <p class="note">Instagram's file says whose posts you saw and when, not the captions. So nothing needs to be sent to the AI at all — only a short summary of the result.</p>`,
-    },
-  },
-  screentime: {
-    title: 'Quick check with Screen Time',
-    sub: 'One screenshot of your phone\'s own screen-time page and three quick questions. Nothing to download.',
-    tabs: {
-      'iPhone': `
-        <ol class="howto">
-          <li><span>Open <strong>Settings</strong> → <strong>Screen Time</strong> → <strong>See All App &amp; Website Activity</strong>.</span></li>
-          <li><span>Tap <strong>Week</strong> at the top. Take a screenshot showing the <strong>Daily Average</strong>.</span></li>
-          <li><span>Scroll to <strong>Most Used</strong> and take another screenshot of the app list.</span></li>
-        </ol>
-        ${'QUICK_QS'}`,
-      'Android': `
-        <ol class="howto">
-          <li><span>Open <strong>Settings</strong> → <strong>Digital Wellbeing &amp; parental controls</strong>.</span></li>
-          <li><span>Take a screenshot of the screen-time circle and the app list below it.</span></li>
-        </ol>
-        ${'QUICK_QS'}`,
+      'Screenshots': steps('Profile → <strong>☰</strong> → <strong>Your activity</strong> → <strong>Watch history</strong>', 'Screenshot, scroll, repeat — <strong>5–10</strong> is great', 'Tap <strong>Choose</strong> and pick them all') + SHOT_AI,
+      'Download': steps('Open <a href="https://accountscenter.instagram.com/info_and_permissions/dyi/" target="_blank" rel="noopener">Download your information</a>', 'Pick <strong>Ads information</strong> + <strong>Your activity</strong>, format <strong>JSON</strong>', 'When it\'s emailed, add the .zip here') + more('Can take minutes to a couple of days. The download has no captions, so Drift shows your rhythm and which creators fill your feed. Nothing from it is sent anywhere.'),
     },
   },
   tiktok: {
-    title: 'Get your TikTok history',
-    sub: 'TikTok lets you download your own data. Ask for JSON, and Drift reads it right here.',
+    title: 'TikTok',
     tabs: {
-      'Download your data': `
-        <ol class="howto">
-          <li><span>In TikTok, open <strong>Profile</strong>, then the <strong>☰ menu</strong>, then <strong>Settings and privacy</strong>.</span></li>
-          <li><span>Go to <strong>Account</strong>, then <strong>Download your data</strong>.</span></li>
-          <li><span>Choose <strong>JSON</strong> as the file format and request the download.</span></li>
-          <li><span>When it's ready (minutes to a few days), download the <strong>.zip</strong> from the <strong>Download data</strong> tab.</span></li>
-          <li><span>Drop the .zip straight into the box.</span></li>
-        </ol>
-        <p class="note">TikTok's file records when you watched, not what. Drift shows your rhythm — how often and when — and nothing needs to go to the AI.</p>`,
+      'Screenshots': steps('Profile → <strong>☰</strong> → <strong>Settings and privacy</strong> → <strong>Activity center</strong> → <strong>Watch history</strong>', 'Screenshot, scroll, repeat — <strong>5–10</strong> is great', 'Tap <strong>Choose</strong> and pick them all') + SHOT_AI,
+      'Download': steps('<strong>Settings and privacy</strong> → <strong>Account</strong> → <strong>Download your data</strong>', 'Choose <strong>JSON</strong> and request it', 'When it\'s ready, add the .zip here') + more('Can take minutes to a few days. The download only says when you watched, so Drift shows your rhythm. Nothing from it is sent anywhere.'),
+    },
+  },
+  reddit: {
+    title: 'Reddit',
+    tabs: {
+      'Screenshots': steps('Reddit app → your profile → <strong>History</strong> (or Recently viewed)', 'Screenshot, scroll, repeat — <strong>5–10</strong> is great', 'Tap <strong>Choose</strong> and pick them all') + SHOT_LOCAL,
+      'Quick grab': 'BOOKMARKLET',
+      'Paste': 'PASTE',
+    },
+  },
+  screentime: {
+    title: 'Screen Time check',
+    tabs: {
+      'iPhone': steps('<strong>Settings</strong> → <strong>Screen Time</strong> → <strong>See All App &amp; Website Activity</strong> → <strong>Week</strong>', 'Screenshot the <strong>Daily Average</strong> and the app list') + 'QUICK_QS',
+      'Android': steps('<strong>Settings</strong> → <strong>Digital Wellbeing</strong>', 'Screenshot the circle and the app list') + 'QUICK_QS',
     },
   },
 };
@@ -179,28 +144,21 @@ const GUIDES = {
 function bookmarkletHtml() {
   return `
     <a id="bookmarklet" class="grab" href="${esc(state.bmHref)}" draggable="true" title="Drag me to your bookmarks bar">Grab my history</a>
-    <ol class="howto">
-      <li><span>Show your bookmarks bar: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> (or <kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> on Mac).</span></li>
-      <li><span><strong>Drag</strong> the yellow button up onto the bar.</span></li>
-      <li><span>Open <a href="https://www.youtube.com/feed/history" target="_blank" rel="noopener">youtube.com/feed/history</a> (or your Reddit profile) and click the new bookmark.</span></li>
-      <li><span>Scroll gently while the counter climbs. <strong>15+ videos over 10+ days</strong> is enough; a few weeks is better.</span></li>
-      <li><span>Click <strong>Download my history</strong> and drop that file into the box.</span></li>
-    </ol>
-    <p class="note">Installed it before? Drag it up again to replace the old one. It only reads the page you click it on.</p>
-    <details class="more"><summary>On a phone, or can't drag?</summary>
-      <p style="margin:10px 0">Make any bookmark, edit it, and paste this script as its address.</p>
-      <button id="copyBm" class="btn btn-quiet btn-sm" type="button">Copy the script</button>
-    </details>
-    <details class="more"><summary>Read the full script</summary><pre>${esc(state.bmSource || 'loading…')}</pre></details>`;
+    ${steps('Drag the yellow button to your bookmarks bar', 'Open your <a href="https://www.youtube.com/feed/history" target="_blank" rel="noopener">history page</a> and click it', 'Scroll a bit, then <strong>Download</strong> and add the file here')}
+    <details class="more-info"><summary>More info</summary>
+      <p>Computer only. It reads only the page you click it on and talks to no server. Installed before? Drag it up again to update it.</p>
+      <p><button id="copyBm" class="btn btn-quiet btn-sm" type="button">Copy the script</button></p>
+      <details><summary>Read the script</summary><pre>${esc(state.bmSource || 'loading…')}</pre></details>
+    </details>`;
 }
 
 const PASTE_HTML = `
   <div class="paste">
-    <p class="note" style="margin:0 0 14px">On your history page, press <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>A</kbd>, copy, and paste below. Easier on phones, but video lengths are lost.</p>
-    <textarea id="pasteArea" placeholder="Paste the copied page here"></textarea>
+    ${steps('On your history page: select all, copy', 'Paste below')}
+    <textarea id="pasteArea" placeholder="Paste here"></textarea>
     <div class="row">
       <select id="pasteSource" aria-label="Where it's from"><option value="youtube">YouTube</option><option value="reddit">Reddit</option></select>
-      <button id="pasteBtn" class="btn btn-lantern btn-sm" type="button">Analyse pasted text</button>
+      <button id="pasteBtn" class="btn btn-lantern btn-sm" type="button">Analyse</button>
     </div>
   </div>`;
 
@@ -208,12 +166,9 @@ const IS_PHONE = /iphone|ipad|android/i.test(navigator.userAgent);
 const IS_ANDROID = /android/i.test(navigator.userAgent);
 const QUICK_QS = `
   <div class="quick-qs">
-    <fieldset class="mcq small-mcq"><legend>When do you scroll the most?</legend>
-      ${['Morning', 'Afternoon', 'Evening', 'Late at night'].map((v) => `<label class="opt"><input type="radio" name="qWhen" value="${v}" /><span><b>${v}</b></span></label>`).join('')}</fieldset>
-    <fieldset class="mcq small-mcq"><legend>How do you usually feel after scrolling?</legend>
-      ${['Good', 'Fine', 'Tired', 'Low or anxious', 'Like I wasted time'].map((v) => `<label class="opt"><input type="radio" name="qFeel" value="${v}" /><span><b>${v}</b></span></label>`).join('')}</fieldset>
-    <fieldset class="mcq small-mcq"><legend>Why do you usually open it?</legend>
-      ${['To relax', 'Boredom', 'Friends and messages', 'News and updates', 'Just habit'].map((v) => `<label class="opt"><input type="radio" name="qWhy" value="${v}" /><span><b>${v}</b></span></label>`).join('')}</fieldset>
+    <label>Scroll most<select name="qWhen"><option value="">Choose…</option>${['Morning', 'Afternoon', 'Evening', 'Late at night'].map((v) => `<option>${v}</option>`).join('')}</select></label>
+    <label>Feel after<select name="qFeel"><option value="">Choose…</option>${['Good', 'Fine', 'Tired', 'Low or anxious', 'Like I wasted time'].map((v) => `<option>${v}</option>`).join('')}</select></label>
+    <label>Open it for<select name="qWhy"><option value="">Choose…</option>${['To relax', 'Boredom', 'Friends and messages', 'News and updates', 'Just habit'].map((v) => `<option>${v}</option>`).join('')}</select></label>
   </div>`;
 
 function renderGuide(platform, preferTab) {
@@ -221,7 +176,6 @@ function renderGuide(platform, preferTab) {
   const names = Object.keys(g.tabs);
   $('#guide').innerHTML = `
     <h3>${esc(g.title)}</h3>
-    <p class="g-sub">${esc(g.sub)}</p>
     ${names.length > 1 ? `<div class="tabs" role="tablist">${names.map((n, i) => `<button class="tab" role="tab" aria-selected="${i === 0}" data-tab="${esc(n)}" type="button">${esc(n)}</button>`).join('')}</div>` : ''}
     <div id="tabBody"></div>`;
   const show = (name) => {
@@ -234,14 +188,12 @@ function renderGuide(platform, preferTab) {
   $$('.tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)));
   const first = preferTab && g.tabs[preferTab] ? preferTab
     : platform === 'screentime' ? (IS_ANDROID ? 'Android' : 'iPhone')
-    : (IS_PHONE && g.tabs.Screenshots) ? 'Screenshots' : names.find((n) => n !== 'Screenshots') || names[0];
+    : g.tabs.Screenshots && (IS_PHONE || platform !== 'youtube') ? 'Screenshots' : names.find((n) => n !== 'Screenshots') || names[0];
   show(first);
   const shots = platform === 'screentime';
-  $('#dropTitle').textContent = shots ? 'Add your Screen Time screenshot' : 'Add your file or screenshots';
-  $('#dropBtn').textContent = shots ? 'Choose my screenshot' : IS_PHONE && platform === 'youtube' ? 'Choose my screenshots' : 'Choose my file';
-  $('#dropSub').textContent = shots ? 'One or two screenshots — read on your phone, never uploaded'
-    : platform === 'youtube' ? 'Screenshots, Takeout\'s .zip or watch-history.json, or the quick-grab file'
-    : platform === 'reddit' ? 'The quick-grab file' : `Your ${platform === 'tiktok' ? 'TikTok' : 'Instagram'} .zip — no need to unzip`;
+  $('#dropTitle').textContent = shots ? 'Add your screenshot' : 'Add screenshots or a file';
+  $('#dropBtn').textContent = 'Choose';
+  $('#dropSub').textContent = '';
 }
 
 function wireGuide() {
@@ -287,7 +239,8 @@ function readFiles(files) {
   const imgs = files.filter((f) => f.type.startsWith('image/') || /\.(png|jpe?g|heic|webp)$/i.test(f.name));
   if (!imgs.length) return readFile(files[0]);
   if (state.platform === 'screentime') return quickCheck(imgs);
-  return youtubeScreens(imgs);
+  if (state.platform === 'instagram' || state.platform === 'tiktok') return visionScreens(imgs, state.platform);
+  return textScreens(imgs, state.platform === 'reddit' ? 'reddit' : 'youtube');
 }
 
 function showBusy(title, line) {
@@ -297,16 +250,16 @@ function showBusy(title, line) {
   return (t) => { const l = $('#busyLine'); if (l) l.textContent = t; };
 }
 
-async function youtubeScreens(imgs) {
+async function textScreens(imgs, source) {
   const set = showBusy('Reading your screenshots…', 'Getting ready…');
   try {
     const pages = await readImages(imgs.slice(0, 30), set);
     const text = youtubeTextFromScreens(pages);
-    const file = parsePastedHistory(text, 'youtube');
+    const file = parsePastedHistory(text, source);
     file.screenshots = true;
     if (file.items.length < 15) {
       return showError(file.items.length ? `We could read ${file.items.length} videos` : 'We couldn\'t find video titles in those screenshots',
-        'Drift needs at least 15 videos. Take a few more screenshots of your YouTube History (5–10 is usually enough), or try Google Takeout.');
+        'Drift needs at least 15. Take a few more screenshots (5–10 is usually enough).');
     }
     ingest(file);
   } catch (err) {
@@ -315,12 +268,36 @@ async function youtubeScreens(imgs) {
   }
 }
 
+// Instagram / TikTok watch history = thumbnails. With the person's OK, the
+// screenshots go to the AI to recognise the topics (1 AI use), then deleted.
+async function visionScreens(imgs, platform) {
+  const set = showBusy('Preparing your screenshots…', 'Getting them ready…');
+  try {
+    const images = [];
+    for (const f of imgs.slice(0, 10)) images.push(await prepImage(f, 1200));
+    set('Ready');
+    const name = platformName(platform);
+    state.pending = { file: { platform, source: platform, vision: true, hasTitles: true, images, items: [] }, items: [], cleaned: [] };
+    $('#sendLede').textContent = `These ${images.length} screenshots go to the AI so it can recognise what kind of ${name} videos you watch. They're deleted right after.`;
+    $('#sendStats').innerHTML = `<div><b>${images.length}</b><span>screenshots sent</span></div><div><b>0</b><span>kept afterwards</span></div><div><b>1</b><span>AI use today</span></div>`;
+    $('#sendPreview').classList.add('hidden');
+    $('#sendThumbs').innerHTML = images.map((im) => `<img src="${im.preview}" alt="" />`).join('');
+    $('#sendThumbs').classList.remove('hidden');
+    goStep(3);
+    $('#sendModal').classList.remove('hidden');
+    $('#sendConfirm').focus();
+  } catch (err) {
+    console.error(err);
+    showError('We couldn\'t open those screenshots', 'Please try again with regular screenshots (PNG or JPG).');
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The Screen Time quick check: one screenshot + three questions → a short
 // report and a personal plan. Only app names, minutes and answers are used.
 // ---------------------------------------------------------------------------
 async function quickCheck(imgs) {
-  const answers = { when: $('input[name=qWhen]:checked')?.value || '', feel: $('input[name=qFeel]:checked')?.value || '', why: $('input[name=qWhy]:checked')?.value || '' };
+  const answers = { when: $('select[name=qWhen]')?.value || '', feel: $('select[name=qFeel]')?.value || '', why: $('select[name=qWhy]')?.value || '' };
   const set = showBusy('Reading your Screen Time…', 'Getting ready…');
   try {
     const pages = await readImages(imgs.slice(0, 4), set);
@@ -361,14 +338,14 @@ function renderQuick(st, answers) {
       <h3 class="r-headline">${esc(headline)}</h3>
       ${lines.length ? `<p class="section-lede" style="font-size:17px">${esc(lines.join(' '))}</p>` : ''}
       <div class="grid">
-        ${st.apps.length ? `<div class="tile wide"><h4>Time per app, per day</h4><p class="sub">Read from your screenshot on this device.</p>
+        ${st.apps.length ? `<div class="tile wide"><h4>Time per app, per day</h4>
           ${st.apps.map((a) => `<div class="bar-row"><span>${esc(a.name)}</span><span class="bar"><span style="width:${(a.minutes / max) * 100}%;background:${a.social ? 'var(--lantern)' : 'var(--kelp)'}"></span></span><span class="n">${fmtMin(a.minutes)}</span></div>`).join('')}
           <div class="legend"><span><i style="background:var(--lantern)"></i>Social and video apps</span><span><i style="background:var(--kelp)"></i>Other apps</span></div>
           ${st.pickups ? `<p class="fine">You pick up your phone about ${st.pickups} times${st.pickups > 300 ? ' a week' : ' a day'}.</p>` : ''}</div>` : ''}
         ${planTile()}
         ${quickAskPanel()}
       </div>
-      <p class="fine">Want the full picture — what you watch and how it changed? <a class="text-link" href="start.html">Get your full report</a>.</p>
+      
       <div class="actions"><button class="btn btn-quiet" id="againBtn" type="button">Start again</button></div>
     </div>`;
   wirePlan({ drift, stats, platform, hasTitles: false, key: 'quick.' + new Date().toISOString().slice(0, 10) });
@@ -385,7 +362,7 @@ function renderQuick(st, answers) {
 function quickAskPanel() {
   return `<div class="ask" id="quickAsk">
     <div class="ask-head"><h4>Ask Drift about your screen time</h4><a class="text-link" href="ask.html">Open full page</a></div>
-    <p class="sub">Ask anything — what to change first, how to set limits, or anything else.</p>
+    
     <div class="ask-box">${chatBoxHTML({ placeholder: 'e.g. how do I cut down at night?' })}</div>
   </div>`;
 }
@@ -447,6 +424,8 @@ function ingest(file) {
     ? cleaned.slice(0, 10).map((c) => c.title).join('\n') + (cleaned.length > 10 ? `\n…and ${cleaned.length - 10} more` : '') +
       (items.length > capped.length ? `\n\n(Your file holds ${items.length} — Drift reads the newest ${capped.length}.)` : '')
     : `${capped.length} items, analysed on this device only.`;
+  $('#sendPreview').classList.remove('hidden');
+  $('#sendThumbs').classList.add('hidden');
   $('#sendModal').classList.remove('hidden');
   $('#sendConfirm').focus();
 }
@@ -484,7 +463,19 @@ async function analyze({ file, items, cleaned }) {
     let labeled;
     let usedBackup = false;
     state.limitHit = false;
-    if (file.hasTitles) {
+    if (file.vision) {
+      next();
+      const li = $('.run-steps li.now'); if (li) li.textContent = 'Looking at your screenshots';
+      if (!server.up && !(await waitForServer(60000))) { const e = new Error('asleep'); e.status = 503; throw e; }
+      let videos;
+      try { videos = (await postJSON('/api/vision', { platform: file.platform, images: file.images.map(({ media_type, data }) => ({ media_type, data })) })).videos; }
+      catch (e) { if (e.body?.error === 'daily_limit') { e.status = 'limit'; } throw e; }
+      file.images = null; // don't keep them around
+      if (!videos || videos.length < 15) {
+        return showError(`We found ${videos?.length || 0} videos`, 'Drift needs at least 15. Add a few more screenshots (5–10 is usually enough).');
+      }
+      labeled = videos.map((v) => ({ title: `${platformName(file.platform)} video`, channel: '', topic: v.topic, intensity: v.intensity, durationSec: 0, watchedAt: null }));
+    } else if (file.hasTitles) {
       next();
       // Give a sleeping AI server up to ~40s to wake; otherwise use the
       // in-browser backup engine so you're never stuck waiting.
@@ -532,8 +523,9 @@ async function analyze({ file, items, cleaned }) {
     renderReport();
   } catch (err) {
     console.error(err);
+    if (err.status === 'limit') return showError('Today\'s AI uses are used up', 'Screenshots from Instagram and TikTok need the AI. Your uses reset at midnight — or try the Screen Time check, which works on your device.');
     showError(err.status === 429 ? 'Too many analyses at once' : 'Something went wrong while analysing',
-      err.status === 429 ? 'Drift limits how often each person can run it, to keep it free. Wait a minute and try again.' : 'Your file never left your browser. Please try again in a moment.');
+      err.status === 429 ? 'Drift limits how often each person can run it, to keep it free. Wait a minute and try again.' : 'Please try again in a moment.');
   }
 }
 
@@ -623,13 +615,13 @@ function renderReport() {
 
   const tiles = [];
   if (real) tiles.push(planTile());
-  if (real && weeks.length > 1) tiles.push(`<div class="tile wide"><h4>Week by week</h4><p class="sub">${file.hasTitles ? 'How much you watched, split by topic. The line is how emotionally charged it was.' : 'How much you watched each week. The line is how many separate sessions.'}</p>${timelineSvg(weeks, file.hasTitles, extras.turn)}</div>`);
-  if (real && extras.shift.length) tiles.push(`<div class="tile"><h4>What moved</h4><p class="sub">Share of your watching, earlier weeks <span style="color:var(--mist)">(grey)</span> vs recent <span style="color:var(--lantern)">(gold)</span>.</p>${shiftRows(extras.shift)}</div>`);
-  if (real) tiles.push(`<div class="tile ${extras.shift.length ? '' : 'wide'}"><h4>What changed with it</h4><p class="sub">Compared only with your own earlier weeks.</p>${habitsHtml(report)}</div>`);
-  if (real && extras.hours) tiles.push(`<div class="tile wide"><h4>When you watch</h4><p class="sub">Hour of day, earlier weeks vs recent.</p>${clockSvg(extras.hours)}</div>`);
-  if (extras.igTopics.length) tiles.push(`<div class="tile wide"><h4>What Instagram thinks you're into</h4><p class="sub">The interests Instagram has guessed for you, straight from your download.</p><div class="chips">${extras.igTopics.slice(0, 24).map((t) => `<span class="chip">${esc(t)}</span>`).join('')}</div></div>`);
+  if (real && weeks.length > 1) tiles.push(`<div class="tile wide"><h4>Week by week</h4>${timelineSvg(weeks, file.hasTitles, extras.turn)}</div>`);
+  if (real && extras.shift.length) tiles.push(`<div class="tile"><h4>What moved</h4><p class="sub"><span style="color:var(--mist)">Earlier</span> vs <span style="color:var(--lantern)">recent</span></p>${shiftRows(extras.shift)}</div>`);
+  if (real) tiles.push(`<div class="tile ${extras.shift.length ? '' : 'wide'}"><h4>Your habits</h4>${habitsHtml(report)}</div>`);
+  if (real && extras.hours) tiles.push(`<div class="tile wide"><h4>When you watch</h4>${clockSvg(extras.hours)}</div>`);
+  if (extras.igTopics.length) tiles.push(`<div class="tile wide"><h4>What Instagram thinks you like</h4><div class="chips">${extras.igTopics.slice(0, 24).map((t) => `<span class="chip">${esc(t)}</span>`).join('')}</div></div>`);
   const small = [];
-  if (real && extras.creators) small.push(`<h4>Who fills your feed</h4><p class="sub">Your top 3 creators' share of everything you watched. Names stay on this device.</p><div class="big-stat">${pct(extras.creators.lateTop3)}%<small>recently, from ${pct(extras.creators.earlyTop3)}% earlier</small></div><div class="chips">${extras.creators.lateTop.slice(0, 5).map((c) => `<span class="chip">${esc(c.name)}</span>`).join('')}</div>`);
+  if (real && extras.creators) small.push(`<h4>Your top 3 creators</h4><div class="big-stat">${pct(extras.creators.lateTop3)}%<small>recently, from ${pct(extras.creators.earlyTop3)}% earlier</small></div><div class="chips">${extras.creators.lateTop.slice(0, 5).map((c) => `<span class="chip">${esc(c.name)}</span>`).join('')}</div>`);
   if (prev && real) small.push(`<h4>Since your last saved run</h4><p class="sub">${esc(new Date(prev.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}: ${esc(TYPE_LABEL[prev.type] || prev.type)}</p><div class="big-stat">${drift.driftScore ?? '–'}<small>now, from ${prev.score ?? '–'}</small></div>`);
   const cols = small.length === 1 ? 'wide' : '';
   small.forEach((h) => tiles.push(`<div class="tile ${cols}">${h}</div>`));
@@ -660,7 +652,7 @@ function renderReport() {
         ${real ? '<button class="btn btn-quiet" id="saveBtn" type="button">Save to this device</button>' : ''}
         <button class="btn btn-quiet" id="againBtn" type="button">Analyse another file</button>
       </div>
-      <p class="fine">${esc(sourceTag)}. Drift shows patterns, not proof, and compares you only with your own earlier weeks. Rules v${RULES_VERSION}.</p>
+      <details class="more-info fine"><summary>About this report</summary><p>${esc(sourceTag)}. Drift shows patterns, not proof, and compares you only with your own earlier weeks. Rules v${RULES_VERSION}.</p></details>
     </div>`;
 
   requestAnimationFrame(() => { const v = $('.dial .val'); if (v) v.style.strokeDashoffset = v.dataset.to; });
@@ -683,18 +675,17 @@ function shareTile() {
   const { file } = state.analysis;
   const c = state.consent;
   if (file.sample || !c?.share) {
-    return `<div class="tile wide quiet-tile"><h4>Was this accurate?</h4><p class="sub" style="margin:0">${file.sample ? 'This is an example report, so nothing is shared.' : 'You chose to keep everything on your device, so nothing about this report is kept.'}</p></div>`;
+    return '';
   }
   return `<div class="tile wide share-tile" id="shareTile">
-    <h4>One quick question: did this result feel accurate?</h4>
-    <p class="sub">Your answer and an anonymous summary will be shared to help improve Drift, as you agreed. No titles, names or dates.</p>
+    <h4>Did this feel accurate?</h4>
     <div class="mcq-row" role="group" aria-label="Did this feel accurate?">
       <button class="opt-btn" data-acc="yes" type="button">Yes</button>
       <button class="opt-btn" data-acc="partly" type="button">Partly</button>
       <button class="opt-btn" data-acc="no" type="button">No</button>
       <button class="opt-btn" data-acc="unsure" type="button">Not sure</button>
     </div>
-    <p class="sub" style="margin:14px 0 0"><button class="linkish" id="skipShare" type="button">Don't share this one</button></p>
+    <p class="sub" style="margin:12px 0 0"><button class="linkish" id="skipShare" type="button">Don't share this one</button></p>
   </div>`;
 }
 
@@ -726,7 +717,7 @@ function wireShare() {
       const r = await postJSON('/api/contribute', contributionPayload(b.dataset.acc));
       const list = sharedList(); list.push({ id: r.id, token: r.deleteToken, at: Date.now() });
       try { localStorage.setItem(SHARED_KEY, JSON.stringify(list.slice(-50))); } catch { /* ignore */ }
-      tile.innerHTML = `<h4>Thank you — shared anonymously</h4><p class="sub" style="margin:0">It helps make Drift more accurate for everyone. <a class="text-link" href="results.html">See the shared totals</a></p>
+      tile.innerHTML = `<h4>Thanks — shared anonymously</h4><p class="sub" style="margin:0"><a class="text-link" href="results.html">See shared totals</a></p>
         <p style="margin-top:14px"><button class="btn btn-quiet btn-sm" id="unshare" type="button">Remove my summary</button></p>`;
       $('#unshare').addEventListener('click', async () => {
         try {
@@ -829,7 +820,7 @@ const AI_SUGGEST = ['What does my result mean?', 'What should I change first?', 
 function askPanel() {
   return `<div class="ask" id="reportAsk">
     <div class="ask-head"><h4>Ask Drift about your report</h4><a class="text-link" href="ask.html">Open full page</a></div>
-    <p class="sub">Ask anything — about your result, what to do next, or anything else. Questions about your own history (the suggestions) are answered on this device.</p>
+    
     <div class="ask-box">${chatBoxHTML({ placeholder: 'e.g. what should I change first?' })}</div>
   </div>`;
 }

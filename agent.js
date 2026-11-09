@@ -174,8 +174,9 @@ const DRIFT_KB = [
   '- The bookmarklet is a bookmark that runs a tiny script: drag it to your bookmarks bar once, open your history page, click it, and scroll gently while its counter shows items and days collected — it saves one small file you drop back on the site. It talks to no server and only reads the page you click it on. It does capture video durations, so it\'s the only path that can detect engagement drift. If it was installed a while ago it should be dragged up again to replace the old copy — a saved bookmark keeps the old script. On mobile you can paste the script into a bookmark, or use the paste-in fallback (which also loses durations).',
   '- Drift also reads Instagram and TikTok data downloads (JSON format; the whole .zip can be dropped in). Instagram: Settings → Accounts Center → Your information and permissions → Download your information → choose Ads information + Your activity, JSON format. TikTok: Settings and privacy → Account → Download your data → JSON. These downloads have no titles, so Drift shows RHYTHM (how often and when you watch), creator concentration (Instagram), and the interests Instagram has guessed for you — and nothing from those files is sent to the AI, only a short summary.',
   '- In the report, "Ask your data" answers questions about the reader\'s own history (late-night watching, busiest week, top creators, when it changed) on their device. You only see the summary, so for those specifics, point them to that panel.',
-  '- EASIER WAYS IN (v5): (1) Screen Time quick check — on the "Get your report" page choose "Quickest: one Screen Time screenshot", answer 3 multiple-choice questions, and add a screenshot of iPhone Settings → Screen Time → See All App & Website Activity → Week (or Android Settings → Digital Wellbeing). It shows time per app and makes a plan. (2) YouTube screenshots — in the YouTube app tap You → History (View all), take 5–10 screenshots while scrolling, and choose them in Drift. Screenshots are read ON THE DEVICE by built-in text recognition and never uploaded; only the video titles go to the AI after the person sees them. Dates are estimated if the screenshots don\'t show them.',
+  '- EASIER WAYS IN (v5): (1) Screen Time quick check — on the "Get your report" page choose "Quickest: one Screen Time screenshot", answer 3 multiple-choice questions, and add a screenshot of iPhone Settings → Screen Time → See All App & Website Activity → Week (or Android Settings → Digital Wellbeing). It shows time per app and makes a plan. (2) History screenshots for every app — YouTube (You → History → View all) and Reddit (profile → History) are read ON THE DEVICE by text recognition, and only titles go to the AI; Instagram (Profile → ☰ → Your activity → Watch history) and TikTok (Settings and privacy → Activity center → Watch history) show thumbnails, so with the person\'s OK the screenshots go to the AI to recognise topics, then are deleted. 5–10 screenshots is enough. Dates are estimated if not shown.',
   '- PERSONAL PLAN: after a report (or quick check), "Make it the feed you want" asks what they want (sleep better, spend less time, see less of what\'s growing, more variety, focus better, happy as is) and gives a 7-day plan from their own numbers, the exact app settings that help, a checklist saved on their device, and a calendar reminder to check again in 2 weeks.',
+  '- DAILY LIMIT: each person gets 4 AI uses a day (each Ask Drift question, each report, each set of Instagram/TikTok screenshots), resetting at midnight India time. After that, reports are still made on the device.',
   '- PAGES: Home, Get your report (start.html), Ask Drift (ask.html — this full chat, with saved chats on the device), How it works, Privacy, Help, Shared results. Sharing an anonymous summary is optional and asked first (with an age question; 13–17 need a parent\'s OK; nothing is shared for under-13s).',
   '- Modes: with an API key Drift uses Claude live; without one it runs a deterministic "demo engine" so everything still works end to end. A badge at the top-right shows which mode is active.',
 ].join('\n');
@@ -303,6 +304,56 @@ export async function chatAboutDrift({ drift, report, stats = null, history = []
   const a = mockChat(drift, report, q);
   onText(a);
   return { answer: a, source: 'mock', sources: [] };
+}
+
+// ---------------------------------------------------------------------------
+// Screenshots of Instagram / TikTok watch history show thumbnails, not titles.
+// The AI looks at them and labels each video's topic and intensity. Names and
+// faces are ignored; nothing is stored.
+// ---------------------------------------------------------------------------
+export async function labelScreens({ images, platform }) {
+  if (!hasKey) return null;
+  const app = platform === 'tiktok' ? 'TikTok' : 'Instagram Reels';
+  try {
+    const msg = await client.messages.create({
+      model: MODEL,
+      max_tokens: 4000,
+      system:
+        `These are screenshots of a person's ${app} watch history: grids of video thumbnails, newest first ` +
+        '(screenshot 1 is the most recent; within a screenshot, read left to right, top to bottom). For EVERY video thumbnail, ' +
+        'in that order across all screenshots, give its most likely topic from this exact list: ' + TOPICS.join(', ') +
+        ', and an emotional intensity from 0 (calm) to 1 (highly charged — outrage, shock, fear, drama). Ignore app menus, ' +
+        'buttons and partial thumbnails cut off at the edges. Never output names, usernames or descriptions of people. ' +
+        'Answer by calling the record_videos tool once.',
+      messages: [{ role: 'user', content: [
+        ...images.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } })),
+        { type: 'text', text: `${images.length} screenshot(s). Label every thumbnail in order.` },
+      ] }],
+      tools: [{
+        name: 'record_videos',
+        description: 'Record one entry per video thumbnail, in order (newest first).',
+        input_schema: {
+          type: 'object',
+          properties: { videos: { type: 'array', items: { type: 'object', properties: { screenshot: { type: 'integer' }, topic: { type: 'string', enum: TOPICS }, intensity: { type: 'number' } }, required: ['topic', 'intensity'] } } },
+          required: ['videos'],
+        },
+      }],
+      tool_choice: { type: 'auto' },
+    });
+    let j = (msg.content || []).find((b) => b.type === 'tool_use')?.input;
+    if (!j) { const raw = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join(''); try { j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); } catch { j = null; } }
+    const vids = Array.isArray(j?.videos) ? j.videos : [];
+    noteOk();
+    return vids.slice(0, 400).map((v) => ({
+      topic: TOPICS.includes(v.topic) ? v.topic : 'other',
+      intensity: clamp01(Number(v.intensity)),
+      screenshot: Number.isFinite(Number(v.screenshot)) ? Number(v.screenshot) : null,
+    }));
+  } catch (err) {
+    noteFail(err);
+    console.warn('[agent] screenshot labeling failed:', err.message);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

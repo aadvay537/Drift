@@ -62,8 +62,8 @@ const PHONE = [
 
 export function planTile() {
   return `<div class="tile wide plan-tile" id="planTile">
-    <h4>Make it the feed you want</h4>
-    <p class="sub">What would you like to change? Pick one and get a simple 7-day plan, made from your own results.</p>
+    <h4>What would you like to change?</h4>
+    <p class="sub">Pick one for a 7-day plan.</p>
     <div class="goals" id="goals"></div>
     <div id="planOut"></div>
   </div>`;
@@ -120,7 +120,7 @@ function localPlan(a, goal) {
     happy: [['Keep it intentional', 'Before opening the app, have something in mind.', 'Keeps your feed yours.'], ['Use "Not interested" when needed', 'Tap it when something feels off.', 'Small nudges keep it healthy.'], ['Follow what you love', 'Follow 2 creators you really enjoy.', 'Good signals in.'], ['Check your settings', 'Glance at the settings below.', 'Know what\'s there.'], ['Take one break day', 'Try one day with less scrolling and notice how it feels.', 'A good reset.'], ['Share what you enjoy', 'Send something good to a friend.', 'Social media at its best.'], ['Run Drift again', 'Check again in a few weeks.', 'Make sure it stays this way.']],
   };
   const list = plans[goal] || plans.happy;
-  return { intro: 'Here\'s a simple plan for the next 7 days. One small step a day — skip any that don\'t suit you.', days: list.map(([title, how, why], i) => ({ day: i + 1, title, how, why })), checkIn: 'In 2 weeks, run Drift again and see whether things moved the way you wanted.', source: 'local' };
+  return { intro: '', days: list.map(([title, how, why], i) => ({ day: i + 1, title, how, why })), checkIn: 'In 2 weeks, run Drift again and see whether things moved the way you wanted.', source: 'local' };
 }
 
 function renderPlan(a, goal, plan, platform) {
@@ -130,28 +130,28 @@ function renderPlan(a, goal, plan, platform) {
   const others = Object.entries(SETTINGS).filter(([k]) => k !== platform && k !== 'reddit');
   $('#planOut').innerHTML = `
     <div class="plan">
-      <p class="plan-intro">${esc(plan.intro)}</p>
+      
       <ol class="plan-days">
         ${plan.days.map((d) => `<li class="${done.includes(d.day) ? 'done' : ''}">
-          <label><input type="checkbox" data-day="${d.day}" ${done.includes(d.day) ? 'checked' : ''}/><span class="pd-day">Day ${d.day}</span></label>
-          <div><b>${esc(d.title)}</b><p>${esc(d.how)}</p>${d.why ? `<small>${esc(d.why)}</small>` : ''}</div>
+          <label><input type="checkbox" data-day="${d.day}" ${done.includes(d.day) ? 'checked' : ''} aria-label="Mark day ${d.day} done"/><span class="pd-day">Day ${d.day}</span></label>
+          <details><summary>${esc(d.title)}</summary><p>${esc(d.how)}</p>${d.why ? `<small>${esc(d.why)}</small>` : ''}</details>
         </li>`).join('')}
       </ol>
       <p class="plan-progress" id="planProgress"></p>
-      <h5>Settings that help in ${esc(app.name)}</h5>
+      <h5>${esc(app.name)} settings</h5>
       <div class="settings-list">${app.steps.map(([t, d]) => `<details><summary>${esc(t)}</summary><p>${esc(d)}</p></details>`).join('')}</div>
-      <details class="more-settings"><summary>Phone settings, and other apps</summary>
+      <details class="more-settings"><summary>Phone + other apps</summary>
         <div class="settings-list">${PHONE.map(([t, d]) => `<details><summary>${esc(t)}</summary><p>${esc(d)}</p></details>`).join('')}
         ${others.map(([, o]) => o.steps.slice(0, 2).map(([t, d]) => `<details><summary>${esc(o.name)}: ${esc(t)}</summary><p>${esc(d)}</p></details>`).join('')).join('')}</div>
       </details>
-      <p class="fine">Menu names can differ slightly between app versions. Ask Drift if you can't find something.</p>
+      
       <div class="actions">
-        <button class="btn btn-lantern" id="remindBtn" type="button">Remind me to check again in 2 weeks</button>
-        <button class="btn btn-quiet" id="askPlan" type="button">Ask Drift about this plan</button>
+        <button class="btn btn-lantern" id="remindBtn" type="button">Remind me in 2 weeks</button>
+        <button class="btn btn-quiet" id="askPlan" type="button">Ask about this plan</button>
       </div>
-      ${plan.checkIn ? `<p class="fine">${esc(plan.checkIn)}</p>` : ''}
+      
     </div>`;
-  const progress = () => { const n = $$('#planOut [data-day]:checked').length; $('#planProgress').textContent = n ? `${n} of ${plan.days.length} done — nice.` : ''; };
+  const progress = () => { const n = $$('#planOut [data-day]:checked').length; $('#planProgress').textContent = n ? `${n} of ${plan.days.length} done` : 'Tap a day to see how. Tick it when done.'; };
   $$('#planOut [data-day]').forEach((c) => c.addEventListener('change', () => {
     const ids = $$('#planOut [data-day]:checked').map((x) => +x.dataset.day);
     try { localStorage.setItem(key, JSON.stringify(ids)); } catch { /* ignore */ }

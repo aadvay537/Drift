@@ -64,7 +64,7 @@ function renderReportChip() {
   if (!r) { chip.classList.add('hidden'); return; }
   const name = { youtube: 'YouTube', instagram: 'Instagram', tiktok: 'TikTok', reddit: 'Reddit' }[r.platform] || 'YouTube';
   chip.innerHTML = `<label><input type="checkbox" id="useRep" ${useReport ? 'checked' : ''}/> Use my latest report</label>
-    <small>${esc(name)}${r.sample ? ' example' : ''}, ${esc(new Date(r.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}. Only the summary numbers, never your history.</small>
+    <small>${esc(name)}${r.sample ? ' example' : ''}, ${esc(new Date(r.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</small>
     <button class="linkish" id="forgetRep" type="button">Forget it</button>`;
   chip.classList.remove('hidden');
   $('#useRep').addEventListener('change', (e) => { useReport = e.target.checked; if (!view.conv?.messages.length) starters(); });

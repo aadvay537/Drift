@@ -11,7 +11,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { labelItems, writeReport, chatAboutDrift, writePlan, agentMode, getHealth } from './agent.js';
+import { labelItems, writeReport, chatAboutDrift, writePlan, labelScreens, agentMode, getHealth } from './agent.js';
 import { addContribution, deleteContribution, allContributions, storageKind, usageCount, usageAdd } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,7 +24,7 @@ app.disable('x-powered-by');
 // Chat may carry a few attached photos (resized in the browser); everything else is small.
 const jsonSmall = express.json({ limit: '1mb' });
 const jsonChat = express.json({ limit: '12mb' });
-app.use((req, res, next) => (req.path === '/api/chat' ? jsonChat : jsonSmall)(req, res, next));
+app.use((req, res, next) => (req.path === '/api/chat' || req.path === '/api/vision' ? jsonChat : jsonSmall)(req, res, next));
 
 // Basic security headers. The page loads its font from Google Fonts only.
 app.use((_req, res, next) => {
@@ -276,6 +276,24 @@ app.post('/api/chat', limitChat, useAllowance, async (req, res) => {
   } catch (err) {
     console.error('[/api/chat]', err);
     if (!closed) res.end(JSON.stringify({ error: 'chat failed' }) + '\n');
+  }
+});
+
+// 3c. Instagram / TikTok watch-history screenshots → topic + intensity per
+// video. Only sent after the person agrees in the preview. Counts as 1 AI use.
+app.post('/api/vision', limitLabel, useAllowance, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const platform = b.platform === 'tiktok' ? 'tiktok' : 'instagram';
+    const IMG = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    const images = Array.isArray(b.images) ? b.images.filter((im) => im && IMG.has(im.media_type) && typeof im.data === 'string' && im.data.length < 2_500_000).slice(0, 10) : [];
+    if (!images.length) return res.status(400).json({ error: 'no screenshots' });
+    const videos = await labelScreens({ images, platform });
+    if (!videos) return res.status(503).json({ error: 'could not read screenshots' });
+    res.json({ videos });
+  } catch (err) {
+    console.error('[/api/vision]', err);
+    res.status(500).json({ error: 'could not read screenshots' });
   }
 });
 
