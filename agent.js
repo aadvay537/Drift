@@ -334,13 +334,28 @@ export async function writePlan({ drift, stats, goal, platform }) {
         '(Settings and activity → Content preferences → Reset suggested content; "Not interested"; Time management daily limit; ' +
         'Quiet mode), TikTok (Settings and privacy → Content preferences → Refresh your For You feed; Filter keywords; Screen time ' +
         'daily limit). Tone: warm, encouraging, never blaming, never "addicted", never comparing them to others; frame it as getting ' +
-        'the feed THEY want. Plain simple English. Respond with ONLY JSON: ' +
-        '{"intro": "1-2 sentences", "days": [{"day": 1, "title": "short action", "how": "1-2 sentences, concrete", "why": "short, linked to their data"}] (exactly 7), ' +
-        '"checkIn": "one sentence on what to look for when they run Drift again in 2 weeks"}',
+        'the feed THEY want. Plain simple English. Give exactly 7 days, by calling the make_plan tool.',
       messages: [{ role: 'user', content: JSON.stringify({ goal: goalText, platform, drift: driftFacts(drift), stats }) }],
+      // A forced tool call returns structured data, so the plan is always valid.
+      tools: [{
+        name: 'make_plan',
+        description: 'Return the 7-day plan.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            intro: { type: 'string', description: '1-2 sentences' },
+            days: {
+              type: 'array', minItems: 7, maxItems: 7,
+              items: { type: 'object', properties: { title: { type: 'string', description: 'short action' }, how: { type: 'string', description: '1-2 sentences, concrete' }, why: { type: 'string', description: 'short, linked to their data' } }, required: ['title', 'how', 'why'] },
+            },
+            checkIn: { type: 'string', description: 'one sentence on what to look for when they run Drift again in 2 weeks' },
+          },
+          required: ['intro', 'days', 'checkIn'],
+        },
+      }],
+      tool_choice: { type: 'tool', name: 'make_plan' },
     });
-    const raw = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-    const j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+    const j = (msg.content || []).find((b) => b.type === 'tool_use')?.input || {};
     if (!Array.isArray(j.days) || j.days.length < 5) throw new Error('bad plan shape');
     noteOk();
     return {
