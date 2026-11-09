@@ -151,11 +151,10 @@ export function md(src) {
 // ---------------------------------------------------------------------------
 // Photos: resize in the browser so they're small enough to send.
 // ---------------------------------------------------------------------------
-async function prepImage(file) {
+export async function prepImage(file, max = 1568) {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
-    const max = 1568;
     const scale = Math.min(1, max / Math.max(img.width, img.height));
     const c = document.createElement('canvas');
     c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);

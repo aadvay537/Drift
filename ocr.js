@@ -47,8 +47,8 @@ export async function readImages(files, onStatus) {
 // In the YouTube app's History list, each video is its title (1–2 lines)
 // followed by a line with the channel and views, e.g. "Channel · 1.2M views".
 // ---------------------------------------------------------------------------
-const UI_NOISE = /^(history|search watch history|home|shorts|subscriptions|you|library|watch history|manage all history|all|videos|music|podcasts|live|clear all watch history|pause watch history|[+]|create|notifications)$/i;
-const META = /(\bviews?\b|\bwatched\b|\bago\b|[•·]|\bsubscribers?\b)/i;
+const UI_NOISE = /^(recently viewed|recent|popular|answers|chat|inbox|communities|history|search watch history|home|shorts|subscriptions|you|library|watch history|manage all history|all|videos|music|podcasts|live|clear all watch history|pause watch history|[+]|create|notifications)$/i;
+const META = /(\bviews?\b|\bwatched\b|\bago\b|[•·]|\bsubscribers?\b|\br\/\w+|\bu\/\w+|\bcomments?\b|\bupvotes?\b|\bvotes?\b|\bpromoted\b)/i;
 const STATUS_BAR = /^\s*\d{1,2}:\d{2}\s*(am|pm)?\s*[\W\d%]*$/i;
 const DUR = /^\d{1,2}:\d{2}(:\d{2})?$/;
 const DATE_HDR = /^(today|yesterday|(sun|mon|tue|wed|thu|fri|sat)[a-z]*(,?\s.*\d)?|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(,\s*\d{4})?|\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*(\s+\d{4})?)$/i;

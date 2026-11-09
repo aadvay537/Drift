@@ -610,3 +610,50 @@ a.cw-btn { text-decoration: none; }
 .ask-side { overflow-x: hidden; }
 .usage-note { font-size: 12.5px; color: var(--mist); text-align: center; margin: 6px 0 0; min-height: 1em; }
 .usage-note.out { color: var(--coral); font-weight: 600; }
+
+/* =====================================================================
+   Lighter layout: dropdowns instead of paragraphs
+   ===================================================================== */
+.more-info { margin-top: 14px; font-size: 15px; color: var(--mist); }
+.more-info > summary { cursor: pointer; color: var(--lantern); font-weight: 600; list-style: none; display: inline-flex; gap: 6px; align-items: center; }
+.more-info > summary::-webkit-details-marker { display: none; }
+.more-info > summary::before { content: 'ⓘ'; font-weight: 400; }
+.more-info p { margin: 10px 0 0; color: #c9d9d6; max-width: 62ch; }
+.more-info pre { max-height: 220px; overflow: auto; background: var(--abyss); padding: 12px; border-radius: 8px; font-size: 12px; }
+.more-info.fine { margin-top: 4px; }
+.opt-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.opt-row .opt { flex: 1 1 120px; justify-content: center; align-items: center; }
+.mcq legend { font-size: 20px; }
+.mcq .opt { padding: 16px 18px; align-items: center; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.consent-note { margin: 0; }
+.center-link { text-align: center; margin-top: 22px; }
+.narrow { max-width: 760px; }
+.faq-list { display: grid; gap: 8px; margin-top: 18px; }
+.faq-list details { background: var(--deep); border-radius: 12px; padding: 16px 18px; }
+.faq-list summary { cursor: pointer; font-weight: 600; font-size: 18px; }
+.faq-list details p { color: #c9d9d6; margin-top: 10px; }
+.privacy-list { margin-top: 0; }
+.pipeline p { font-size: 15px; }
+.three p { font-size: 16px; }
+.howto li { color: #d7e5e2; }
+.guide h3 { font-size: 28px; margin-bottom: 16px; }
+.quick { width: 100%; margin-top: 14px; align-items: center; padding: 16px 20px; }
+.quick b { font-size: 17px; margin: 0; }
+.quick small { font-size: 14px; }
+.pick-foot { margin-top: 18px; }
+.quick-qs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.quick-qs label { display: grid; gap: 6px; font-size: 14px; color: var(--mist); flex: 1 1 160px; }
+.quick-qs select { padding: 11px 12px; font-size: 16px; border-radius: 10px; }
+.send-thumbs { display: flex; gap: 8px; flex-wrap: wrap; max-height: 220px; overflow: auto; }
+.send-thumbs img { width: 72px; height: 128px; object-fit: cover; border-radius: 8px; }
+.plan-days li { grid-template-columns: 110px 1fr; align-items: start; padding: 12px 16px; }
+.plan-days details summary { cursor: pointer; font-weight: 650; font-size: 17px; list-style: none; }
+.plan-days details summary::-webkit-details-marker { display: none; }
+.plan-days details summary::after { content: ' ›'; color: var(--mist); }
+.plan-days details[open] summary::after { content: ' ⌄'; }
+.plan-days li.done summary { text-decoration: line-through; text-decoration-color: var(--kelp); }
+.plan-progress { color: var(--mist); font-weight: 500; font-size: 14px; }
+.tile h4 { margin-bottom: 14px; }
+.tile .sub { margin-top: -8px; }
+.ask-box { height: 400px; }
