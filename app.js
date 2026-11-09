@@ -5,7 +5,8 @@ import { ensureUsableTimeline, parseFlexibleDate, cleanItems, normalizeHistoryFi
 import { readHistoryFile } from './platforms.js';
 import { keywordLabel } from './labeler.js';
 import { weeklyTimeline, turningPoint, creatorConcentration, hourProfile, topicShift, topicName } from './insights.js';
-import { $, $$, esc, pct, reduceMotion, ctx, API, server, waitForServer, postJSON, ask, chats, renderSuggest, toast } from './common.js';
+import { $, $$, esc, pct, reduceMotion, ctx, API, server, waitForServer, postJSON, toast } from './common.js';
+import { ChatView, chatBoxHTML, saveLatestReport } from './chat.js';
 
 const state = {
   platform: null,
@@ -370,7 +371,7 @@ async function analyze({ file, items, cleaned }) {
 
     state.analysis = { drift, report, items: prepared.items, weeks, file, extras };
     ctx.analysis = state.analysis;
-    chats['#askLog'] = [];
+    saveLatestReport(state.analysis);
     renderReport();
   } catch (err) {
     console.error(err);
@@ -509,7 +510,6 @@ function renderReport() {
   $('#saveBtn')?.addEventListener('click', saveRun);
   if (real) wireAsk();
   if (real) wireShare();
-  renderSuggest();
 }
 
 // ---------------------------------------------------------------------------
@@ -664,25 +664,25 @@ function clockSvg(h) {
 // rest go to the AI with only the short summary.
 // ---------------------------------------------------------------------------
 const LOCAL_SUGGEST = ['What did I watch late at night?', 'When did it start changing?', 'Who do I watch most?', 'What was my busiest week?', 'What was most intense?'];
-const AI_SUGGEST = ['What does my result mean?', 'Is this reliable?', 'What could I try this week?'];
+const AI_SUGGEST = ['What does my result mean?', 'What should I change first?', 'How do I reset my feed?', 'Is this reliable?'];
 
 function askPanel() {
-  return `<div class="ask">
-    <h4 style="margin:0;font-size:20px">Ask your data</h4>
-    <p class="sub" style="margin:4px 0 0">Questions about your own history are answered on this device. Nothing new is sent.</p>
-    <div class="ask-log" id="askLog"></div>
-    <div class="suggest" id="askSuggest"></div>
-    <form class="ask-form" id="askForm" autocomplete="off" style="margin-top:12px">
-      <input id="askInput" type="text" placeholder="e.g. what did I watch after midnight?" aria-label="Ask about your data" maxlength="500" />
-      <button class="btn btn-lantern btn-sm" type="submit">Ask</button>
-    </form></div>`;
+  return `<div class="ask" id="reportAsk">
+    <div class="ask-head"><h4>Ask Drift about your report</h4><a class="text-link" href="ask.html">Open full page</a></div>
+    <p class="sub">Ask anything — about your result, what to do next, or anything else. Questions about your own history (the suggestions) are answered on this device.</p>
+    <div class="ask-box">${chatBoxHTML({ placeholder: 'e.g. what should I change first?' })}</div>
+  </div>`;
 }
 
+let reportView = null;
 function wireAsk() {
+  const root = $('#reportAsk .ask-box');
+  reportView = new ChatView({ root, persist: false, getAnalysis: () => state.analysis });
+  reportView.start(null, null);
   const qs = state.analysis.file.hasTitles ? [...LOCAL_SUGGEST, ...AI_SUGGEST] : ['Who do I watch most?', 'What was my busiest week?', 'What did I watch late at night?', ...AI_SUGGEST];
-  $('#askSuggest').innerHTML = qs.map((q) => `<button type="button">${esc(q)}</button>`).join('');
-  $$('#askSuggest button').forEach((b) => b.addEventListener('click', () => ask(b.textContent, '#askLog', { fromChip: LOCAL_SUGGEST.includes(b.textContent) })));
-  $('#askForm').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#askInput').value; $('#askInput').value = ''; ask(v, '#askLog'); });
+  const box = root.querySelector('[data-suggest]');
+  box.innerHTML = qs.map((q) => `<button type="button">${esc(q)}</button>`).join('');
+  box.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => reportView.send(b.textContent, { fromChip: LOCAL_SUGGEST.includes(b.textContent) })));
 }
 
 // ---------------------------------------------------------------------------
