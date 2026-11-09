@@ -657,3 +657,11 @@ a.cw-btn { text-decoration: none; }
 .tile h4 { margin-bottom: 14px; }
 .tile .sub { margin-top: -8px; }
 .ask-box { height: 400px; }
+
+/* Screen Time: check the numbers */
+.st-check{display:grid;gap:14px;max-width:520px}
+.st-daily,.st-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.st-daily input,.st-row .st-min{width:72px}
+.st-row .st-name{flex:1;min-width:120px}
+.st-check input{background:var(--surface-2,#15151b);color:inherit;border:1px solid var(--line,#2a2a33);border-radius:10px;padding:8px 10px;font:inherit}
+#stRows{display:grid;gap:8px}

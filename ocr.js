@@ -101,8 +101,13 @@ export function parseScreenTime(pages) {
   let daily = null, pickups = null, weekly = false;
   for (const { text } of pages) {
     const lines = fixDigits(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    let inLimits = false;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
+      // Settings sections list limits, not usage — skip them.
+      if (/\b(app limits?|downtime|communication limits?|always allowed|content (&|and) privacy|app timers?|focus mode|bedtime mode)\b/i.test(l)) { inLimits = true; continue; }
+      if (/most used|daily average|screen time|usage/i.test(l)) inLimits = false;
+      if (inLimits || /\blimit|left today|remaining/i.test(l)) continue;
       if (/daily average/i.test(l)) {
         const m = (l.match(DUR_RE) || (lines[i + 1] || '').match(DUR_RE));
         const v = toMinutes(m); if (v && v < 24 * 60) daily = Math.max(daily || 0, v);
@@ -115,7 +120,8 @@ export function parseScreenTime(pages) {
       for (const app of APPS) {
         const re = new RegExp(`^${app.replace(/\s/g, '\\s*')}\\b`, 'i');
         if (!re.test(l)) continue;
-        const m = l.match(DUR_RE) || (lines[i + 1] || '').match(DUR_RE);
+        const nxt = lines[i + 1] || '';
+        const m = l.match(DUR_RE) || (/limit/i.test(nxt) ? null : nxt.match(DUR_RE));
         const v = toMinutes(m);
         if (v != null && v > 0 && v < 24 * 60 * 7) apps.set(app, Math.max(apps.get(app) || 0, v));
       }
@@ -127,7 +133,8 @@ export function parseScreenTime(pages) {
     const sum = list.reduce((s, a) => s + a.minutes, 0);
     if (sum > daily * 2) list.forEach((a) => (a.minutes = Math.round(a.minutes / 7)));
   }
-  return { dailyMinutes: daily, pickups, apps: list };
+  return { dailyMinutes: daily, pickups, pickupsPeriod: pickups > 300 ? 'week' : 'day', apps: list };
 }
 
+export const isSocial = (name) => SOCIAL.has(String(name || '').trim()) || [...SOCIAL].some((n) => n.toLowerCase() === String(name || '').trim().toLowerCase());
 export const fmtMin = (m) => (m == null ? '–' : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`);
