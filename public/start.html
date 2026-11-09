@@ -94,7 +94,17 @@
       <!-- Step 2: platform -->
       <div class="panel hidden" id="stepPick">
         <button class="back" id="backToConsent" type="button">Back</button>
-        <p class="panel-lede">Which app do you want to look at?</p>
+        <div class="quick-ways">
+          <button class="quick" data-platform="screentime" type="button">
+            <span class="q-icon" aria-hidden="true">⏱️</span>
+            <span><b>Quickest: one Screen Time screenshot</b><small>Works on any phone. About 1 minute, no downloads. Shows your time per app and gives you a plan.</small></span>
+          </button>
+          <button class="quick" data-platform="youtube" data-tab="Screenshots" type="button">
+            <span class="q-icon" aria-hidden="true">📸</span>
+            <span><b>Easy: screenshots of your YouTube history</b><small>Take 5–10 screenshots in the YouTube app. They're read on your phone and never uploaded.</small></span>
+          </button>
+        </div>
+        <p class="panel-lede">Or get your full history from an app:</p>
         <div class="platforms">
           <button class="platform" data-platform="youtube" type="button">
             <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8c1.6.4 7.8.4 7.8.4s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5.2 3L10 15z"/></svg></span>
@@ -127,10 +137,10 @@
           <div class="drop-col">
             <div id="drop" class="dropzone" tabindex="0" role="button" aria-label="Choose your history file">
               <svg class="drop-art" viewBox="0 0 120 60" aria-hidden="true"><path d="M4 18c28-14 52 14 112 0M4 30c32-10 56 10 112 0M4 42c36-6 60 6 112 0"/></svg>
-              <p class="drop-title">Add your file here</p>
+              <p class="drop-title" id="dropTitle">Add your file here</p>
               <p class="drop-sub" id="dropSub">Drag it in, or press the button</p>
-              <span class="btn btn-lantern">Choose my file</span>
-              <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" hidden />
+              <span class="btn btn-lantern" id="dropBtn">Choose my file</span>
+              <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip,image/*" multiple hidden />
             </div>
             <p class="drop-safe">It's read on this device. Nothing is sent until you've seen exactly what will be sent.</p>
           </div>

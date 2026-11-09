@@ -174,6 +174,9 @@ const DRIFT_KB = [
   '- The bookmarklet is a bookmark that runs a tiny script: drag it to your bookmarks bar once, open your history page, click it, and scroll gently while its counter shows items and days collected — it saves one small file you drop back on the site. It talks to no server and only reads the page you click it on. It does capture video durations, so it\'s the only path that can detect engagement drift. If it was installed a while ago it should be dragged up again to replace the old copy — a saved bookmark keeps the old script. On mobile you can paste the script into a bookmark, or use the paste-in fallback (which also loses durations).',
   '- Drift also reads Instagram and TikTok data downloads (JSON format; the whole .zip can be dropped in). Instagram: Settings → Accounts Center → Your information and permissions → Download your information → choose Ads information + Your activity, JSON format. TikTok: Settings and privacy → Account → Download your data → JSON. These downloads have no titles, so Drift shows RHYTHM (how often and when you watch), creator concentration (Instagram), and the interests Instagram has guessed for you — and nothing from those files is sent to the AI, only a short summary.',
   '- In the report, "Ask your data" answers questions about the reader\'s own history (late-night watching, busiest week, top creators, when it changed) on their device. You only see the summary, so for those specifics, point them to that panel.',
+  '- EASIER WAYS IN (v5): (1) Screen Time quick check — on the "Get your report" page choose "Quickest: one Screen Time screenshot", answer 3 multiple-choice questions, and add a screenshot of iPhone Settings → Screen Time → See All App & Website Activity → Week (or Android Settings → Digital Wellbeing). It shows time per app and makes a plan. (2) YouTube screenshots — in the YouTube app tap You → History (View all), take 5–10 screenshots while scrolling, and choose them in Drift. Screenshots are read ON THE DEVICE by built-in text recognition and never uploaded; only the video titles go to the AI after the person sees them. Dates are estimated if the screenshots don\'t show them.',
+  '- PERSONAL PLAN: after a report (or quick check), "Make it the feed you want" asks what they want (sleep better, spend less time, see less of what\'s growing, more variety, focus better, happy as is) and gives a 7-day plan from their own numbers, the exact app settings that help, a checklist saved on their device, and a calendar reminder to check again in 2 weeks.',
+  '- PAGES: Home, Get your report (start.html), Ask Drift (ask.html — this full chat, with saved chats on the device), How it works, Privacy, Help, Shared results. Sharing an anonymous summary is optional and asked first (with an age question; 13–17 need a parent\'s OK; nothing is shared for under-13s).',
   '- Modes: with an API key Drift uses Claude live; without one it runs a deterministic "demo engine" so everything still works end to end. A badge at the top-right shows which mode is active.',
 ].join('\n');
 
@@ -300,6 +303,57 @@ export async function chatAboutDrift({ drift, report, stats = null, history = []
   const a = mockChat(drift, report, q);
   onText(a);
   return { answer: a, source: 'mock', sources: [] };
+}
+
+// ---------------------------------------------------------------------------
+// Personal plan: after the report, the person picks what they want, and we
+// write a short, concrete 7-day plan from their own (aggregate) numbers.
+// ---------------------------------------------------------------------------
+const PLAN_GOALS = {
+  happy: 'They are happy with their feed and just want to keep it healthy and intentional.',
+  less_topic: 'They want to see less of the topic(s) that have been growing in their feed.',
+  sleep: 'They want to sleep better and scroll less late at night.',
+  less_time: 'They want to spend less time overall on the app.',
+  variety: 'They want more variety — to rediscover topics they used to enjoy.',
+  focus: 'They want fewer distractions while studying or working.',
+};
+
+export async function writePlan({ drift, stats, goal, platform }) {
+  const goalText = PLAN_GOALS[goal] || PLAN_GOALS.happy;
+  if (!hasKey) return null;
+  try {
+    const msg = await client.messages.create({
+      model: MODEL,
+      max_tokens: 1800,
+      system:
+        'You write short, practical, kind 7-day plans for Drift, a site that shows people how their social media feed changed. ' +
+        'Use ONLY the facts given (their drift summary and aggregate statistics); never invent numbers. Make each day ONE small, ' +
+        'specific action that takes under 5 minutes to set up, tied to their own data where possible (e.g. their actual late-night ' +
+        'hours, the topic that grew, the platform they use). Include real app settings where helpful: YouTube (turn off Autoplay; ' +
+        '"Not interested" / "Don\'t recommend channel"; pause or clear watch history in Settings → Manage all history), Instagram ' +
+        '(Settings and activity → Content preferences → Reset suggested content; "Not interested"; Time management daily limit; ' +
+        'Quiet mode), TikTok (Settings and privacy → Content preferences → Refresh your For You feed; Filter keywords; Screen time ' +
+        'daily limit). Tone: warm, encouraging, never blaming, never "addicted", never comparing them to others; frame it as getting ' +
+        'the feed THEY want. Plain simple English. Respond with ONLY JSON: ' +
+        '{"intro": "1-2 sentences", "days": [{"day": 1, "title": "short action", "how": "1-2 sentences, concrete", "why": "short, linked to their data"}] (exactly 7), ' +
+        '"checkIn": "one sentence on what to look for when they run Drift again in 2 weeks"}',
+      messages: [{ role: 'user', content: JSON.stringify({ goal: goalText, platform, drift: driftFacts(drift), stats }) }],
+    });
+    const raw = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+    if (!Array.isArray(j.days) || j.days.length < 5) throw new Error('bad plan shape');
+    noteOk();
+    return {
+      intro: String(j.intro || '').slice(0, 400),
+      days: j.days.slice(0, 7).map((d, i) => ({ day: i + 1, title: String(d.title || '').slice(0, 90), how: String(d.how || '').slice(0, 400), why: String(d.why || '').slice(0, 250) })),
+      checkIn: String(j.checkIn || '').slice(0, 300),
+      source: 'ai',
+    };
+  } catch (err) {
+    noteFail(err);
+    console.warn('[agent] plan writer failed:', err.message);
+    return null;
+  }
 }
 
 // Deterministic assistant — used with no API key and as the live fallback.

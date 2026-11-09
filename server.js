@@ -11,7 +11,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { labelItems, writeReport, chatAboutDrift, agentMode, getHealth } from './agent.js';
+import { labelItems, writeReport, chatAboutDrift, writePlan, agentMode, getHealth } from './agent.js';
 import { addContribution, deleteContribution, allContributions, storageKind } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,8 +31,8 @@ app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Content-Security-Policy',
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-    "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'");
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' data: blob:; frame-ancestors 'none'");
   next();
 });
 
@@ -177,6 +177,13 @@ function shapeStats(st) {
     lateNightShare: num(st.lateNightShare),
     top3CreatorShare: st.top3CreatorShare ? { earlier: num(st.top3CreatorShare.earlier), recent: num(st.top3CreatorShare.recent) } : null,
     instagramInterests: Array.isArray(st.instagramInterests) ? st.instagramInterests.slice(0, 30).map((x) => str(x, 40)) : [],
+    // Quick check (Screen Time screenshot + a few multiple-choice answers).
+    screenTime: st.screenTime && typeof st.screenTime === 'object' ? {
+      dailyMinutes: num(st.screenTime.dailyMinutes),
+      pickups: num(st.screenTime.pickups),
+      apps: Array.isArray(st.screenTime.apps) ? st.screenTime.apps.slice(0, 10).map((a) => ({ name: str(a.name, 30), minutesPerDay: num(a.minutes), social: !!a.social })) : [],
+    } : undefined,
+    answers: st.answers && typeof st.answers === 'object' ? Object.fromEntries(Object.entries(st.answers).slice(0, 6).map(([k, v]) => [str(k, 20), str(v, 60)])) : undefined,
   };
 }
 
@@ -226,6 +233,22 @@ app.post('/api/chat', limitChat, async (req, res) => {
   } catch (err) {
     console.error('[/api/chat]', err);
     if (!closed) res.end(JSON.stringify({ error: 'chat failed' }) + '\n');
+  }
+});
+
+// 3b. Personal plan. Same small, non-identifying summary as chat, plus the goal.
+app.post('/api/plan', limitReport, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const drift = b.drift && typeof b.drift.type === 'string' ? shapeDrift(b.drift) : null;
+    if (!drift) return res.status(400).json({ error: 'missing drift' });
+    const goal = ['happy', 'less_topic', 'sleep', 'less_time', 'variety', 'focus'].includes(b.goal) ? b.goal : 'happy';
+    const platform = ['youtube', 'instagram', 'tiktok', 'reddit'].includes(b.platform) ? b.platform : 'youtube';
+    const plan = await writePlan({ drift, stats: shapeStats(b.stats), goal, platform });
+    res.json({ plan });
+  } catch (err) {
+    console.error('[/api/plan]', err);
+    res.json({ plan: null });
   }
 });
 

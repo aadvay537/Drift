@@ -553,3 +553,58 @@ a.cw-btn { text-decoration: none; }
 .ask-page > *, .ask-main, .ask-chat, .ask-chat .cw-log { min-width: 0; }
 .ask-chat { width: 100%; max-width: 860px; }
 @media (max-width: 860px) { .ask-side { box-shadow: none; } body.side-open .ask-side { box-shadow: 20px 0 50px -20px #000; } }
+
+/* =====================================================================
+   Personal plan
+   ===================================================================== */
+.plan-tile { box-shadow: inset 0 0 0 1.5px var(--lantern); background: linear-gradient(180deg, #13303a, var(--deep-2)); }
+.plan-tile h4 { font-size: 22px; }
+.goals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 760px) { .goals { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 420px) { .goals { grid-template-columns: 1fr; } }
+.goal { display: grid; gap: 2px; text-align: left; border: 0; cursor: pointer; padding: 14px 16px; border-radius: 14px; background: var(--abyss); color: var(--foam); box-shadow: inset 0 0 0 1.5px var(--tide); }
+.goal:hover { box-shadow: inset 0 0 0 1.5px var(--mist); }
+.goal.picked { box-shadow: inset 0 0 0 2px var(--lantern); background: #0d2229; }
+.g-icon { font-size: 22px; }
+.goal b { font-size: 17px; font-weight: 650; }
+.goal small { color: var(--mist); font-size: 14px; }
+.plan { margin-top: 22px; }
+.plan-wait { margin-top: 18px; display: flex; gap: 10px; align-items: center; }
+.plan-intro { color: #d6e4e1; font-size: 17px; margin-bottom: 14px; }
+.plan-days { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.plan-days li { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 14px 16px; border-radius: 12px; background: var(--abyss); transition: opacity .2s; }
+.plan-days li.done { opacity: .6; }
+.plan-days li.done b { text-decoration: line-through; text-decoration-color: var(--kelp); }
+.plan-days label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.plan-days input { width: 22px; height: 22px; accent-color: var(--kelp); margin: 1px 0 0; flex: none; }
+.pd-day { font-weight: 700; color: var(--lantern); font-size: 15px; }
+.plan-days b { font-size: 17px; }
+.plan-days p { color: #cfdedb; margin-top: 3px; font-size: 15.5px; }
+.plan-days small { display: block; color: var(--mist); margin-top: 4px; font-size: 14px; }
+@media (max-width: 520px) { .plan-days li { grid-template-columns: 1fr; gap: 6px; } }
+.plan-progress { color: var(--kelp); font-weight: 600; margin-top: 10px; min-height: 1.4em; }
+.plan h5 { font-size: 18px; margin: 22px 0 10px; }
+.settings-list { display: grid; gap: 6px; }
+.settings-list details { background: var(--abyss); border-radius: 10px; padding: 12px 14px; }
+.settings-list summary { cursor: pointer; font-weight: 600; }
+.settings-list details p { color: #cfdedb; margin-top: 8px; font-size: 15.5px; }
+.more-settings { margin-top: 10px; }
+.more-settings > summary { cursor: pointer; color: var(--lantern); font-weight: 600; margin-bottom: 8px; }
+
+/* quick ways in (screenshots / Screen Time) */
+.quick-ways { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+@media (max-width: 760px) { .quick-ways { grid-template-columns: 1fr; } }
+.quick { display: flex; gap: 14px; align-items: flex-start; text-align: left; border: 0; cursor: pointer; padding: 18px 20px; border-radius: var(--r-md); background: linear-gradient(180deg, #14323b, var(--deep-2)); color: var(--foam); box-shadow: inset 0 0 0 1.5px var(--kelp); }
+.quick:hover { box-shadow: inset 0 0 0 1.5px var(--lantern); transform: translateY(-1px); }
+.q-icon { font-size: 28px; line-height: 1; }
+.quick b { display: block; font-size: 18px; font-weight: 650; margin-bottom: 4px; }
+.quick small { color: #c4d6d2; font-size: 15px; line-height: 1.45; }
+.quick-qs { margin-top: 22px; display: grid; gap: 4px; }
+.small-mcq legend { font-size: 18px; margin-bottom: 10px; }
+.small-mcq { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 18px; }
+.small-mcq .opt { padding: 12px 14px; align-items: center; }
+.small-mcq .opt b { font-size: 16px; }
+.small-mcq legend { grid-column: 1 / -1; }
+.bar-row { grid-template-columns: minmax(90px, 130px) 1fr auto; }
+.bar-row .n { white-space: nowrap; min-width: 52px; }
+.ask-side { overflow-x: hidden; }

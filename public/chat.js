@@ -40,6 +40,10 @@ export function saveLatestReport(a) {
     localStorage.setItem(REPORT_KEY, JSON.stringify({ at: Date.now(), platform: a.file.platform || 'youtube', sample: !!a.file.sample, drift: a.drift, report: a.report, stats: chatStats(a) }));
   } catch { /* ignore */ }
 }
+// Save any report-like context (e.g. the Screen Time quick check) for Ask Drift.
+export function saveLatestContext(ctx) {
+  try { localStorage.setItem(REPORT_KEY, JSON.stringify({ at: Date.now(), ...ctx })); } catch { /* ignore */ }
+}
 export function latestReport() { try { return JSON.parse(localStorage.getItem(REPORT_KEY) || 'null'); } catch { return null; } }
 export function forgetLatestReport() { try { localStorage.removeItem(REPORT_KEY); } catch { /* ignore */ } }
 
@@ -225,7 +229,7 @@ export class ChatView {
     this.abort = ctl;
     let textOut = '', sources = [];
     const history = (this.conv?.messages || []).slice(-16).map((m) => ({ role: m.role, content: m.content }));
-    const rep = a ? { drift: a.drift, report: a.report, stats: chatStats(a) } : (this.o.useReport?.() ? latestReport() : null);
+    const rep = this.o.getContext?.() || (a ? { drift: a.drift, report: a.report, stats: chatStats(a) } : (this.o.useReport?.() ? latestReport() : null));
     try {
       const r = await this.fetchWithWake(API + '/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl.signal,

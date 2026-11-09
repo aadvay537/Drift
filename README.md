@@ -16,6 +16,12 @@ This is a working implementation of the [Drift PRD v3.1](./Drift-PRD-v3.1-simple
 - **Share card** (PNG) and **saved runs** (summary only, in your browser) to compare over time.
 - **Under the hood** — current model names, a fast cheap model for labelling (`DRIFT_LABEL_MODEL`), parallel batches, a shared label cache, per-visitor rate limits, security headers, and an honest `/api/health` so a broken key or model name can't hide behind the demo engine.
 
+## What's new in v5
+
+- **Ask Drift** is a full assistant (`ask.html`, plus the corner bubble and the report panel — one engine in `public/chat.js`): strongest model (`DRIFT_CHAT_MODEL`, default `claude-opus-5-5`), current date/time, Anthropic web search with sources (`DRIFT_WEB_SEARCH=off` to disable), photos/screenshots, voice input, saved chats on the device, copy/ask again/stop, code blocks and tables. Falls back to the standard model without tools if needed.
+- **Personal plan** after every report (`public/plan.js`, `POST /api/plan`): pick a goal → 7-day plan from their own numbers, exact app settings, checklist, 2-week calendar reminder.
+- **Easier ways in** (`public/ocr.js`, Tesseract self-hosted in `public/vendor/ocr`): YouTube history screenshots and a Screen Time quick check, both read on the device.
+
 ## Pages (v4.1)
 
 `index.html` home · `start.html` get your report (consent → app → history → report) · `how.html` · `privacy.html` · `help.html` · `results.html` shared totals. Shared code lives in `public/common.js` (AI connection, Ask Drift, formatting).
