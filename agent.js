@@ -357,6 +357,70 @@ export async function labelScreens({ images, platform }) {
 }
 
 // ---------------------------------------------------------------------------
+// Screen Time / Digital Wellbeing screenshots → actual usage per app.
+// The AI reads the layout, so App Limits, Downtime and other settings are
+// never mistaken for usage.
+// ---------------------------------------------------------------------------
+export async function readScreenTime({ images }) {
+  if (!hasKey) return null;
+  try {
+    const msg = await client.messages.create({
+      model: MODEL,
+      max_tokens: 2000,
+      system:
+        'These are screenshots of a phone\'s screen-time page (iPhone Screen Time or Android Digital Wellbeing), possibly several ' +
+        'screenshots of the same page while scrolling. Extract ACTUAL USAGE only. IGNORE anything that is a setting or a limit: ' +
+        'App Limits, Downtime, Communication Limits, Always Allowed, Content & Privacy, app timers, hourglass icons, "limit" values, ' +
+        'focus modes. Merge duplicates that appear in more than one screenshot (keep one entry per app). Say whether the numbers are ' +
+        'for one DAY or a WEEK (the iPhone "Week" tab shows weekly totals per app and a "Daily Average"). Give minutes as numbers ' +
+        '(e.g. "2h 15m" → 135). Pickups and notifications are counts, not minutes. If something is unreadable, leave it out. ' +
+        'Answer by calling the record_screen_time tool once.',
+      messages: [{ role: 'user', content: [
+        ...images.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } })),
+        { type: 'text', text: `${images.length} screenshot(s).` },
+      ] }],
+      tools: [{
+        name: 'record_screen_time',
+        description: 'Record the actual usage shown.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            period: { type: 'string', enum: ['day', 'week'] },
+            dailyAverageMinutes: { type: ['number', 'null'], description: 'Daily average (or the day total if period is day)' },
+            pickups: { type: ['number', 'null'], description: 'Pickups count as shown, if visible' },
+            apps: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, minutes: { type: 'number', description: 'Usage minutes for the period shown' } }, required: ['name', 'minutes'] } },
+          },
+          required: ['period', 'apps'],
+        },
+      }],
+      tool_choice: { type: 'auto' },
+    });
+    let j = (msg.content || []).find((b) => b.type === 'tool_use')?.input;
+    if (!j) { const raw = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join(''); try { j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); } catch { j = null; } }
+    if (!j || !Array.isArray(j.apps)) return null;
+    noteOk();
+    const week = j.period === 'week';
+    const seen = new Map();
+    for (const a of j.apps) {
+      const name = String(a.name || '').trim().slice(0, 40);
+      const m = Number(a.minutes);
+      if (!name || !Number.isFinite(m) || m <= 0) continue;
+      seen.set(name.toLowerCase(), { name, minutes: Math.round(week ? m / 7 : m) });
+    }
+    return {
+      dailyMinutes: Number.isFinite(Number(j.dailyAverageMinutes)) ? Math.round(Number(j.dailyAverageMinutes)) : null,
+      pickups: Number.isFinite(Number(j.pickups)) ? Math.round(Number(j.pickups)) : null,
+      pickupsPeriod: week ? 'week' : 'day',
+      apps: [...seen.values()].sort((a, b) => b.minutes - a.minutes).slice(0, 15),
+    };
+  } catch (err) {
+    noteFail(err);
+    console.warn('[agent] screen time reading failed:', err.message);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Personal plan: after the report, the person picks what they want, and we
 // write a short, concrete 7-day plan from their own (aggregate) numbers.
 // ---------------------------------------------------------------------------

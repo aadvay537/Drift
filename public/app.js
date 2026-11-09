@@ -8,7 +8,7 @@ import { weeklyTimeline, turningPoint, creatorConcentration, hourProfile, topicS
 import { $, $$, esc, pct, reduceMotion, ctx, API, server, waitForServer, postJSON, toast } from './common.js';
 import { ChatView, chatBoxHTML, saveLatestReport, prepImage } from './chat.js';
 import { planTile, wirePlan, planFromAnalysis } from './plan.js';
-import { readImages, youtubeTextFromScreens, parseScreenTime, fmtMin } from './ocr.js';
+import { readImages, youtubeTextFromScreens, parseScreenTime, fmtMin, isSocial } from './ocr.js';
 import { saveLatestContext } from './chat.js';
 
 const state = {
@@ -135,8 +135,8 @@ const GUIDES = {
   screentime: {
     title: 'Screen Time check',
     tabs: {
-      'iPhone': steps('<strong>Settings</strong> → <strong>Screen Time</strong> → <strong>See All App &amp; Website Activity</strong> → <strong>Week</strong>', 'Screenshot the <strong>Daily Average</strong> and the app list') + 'QUICK_QS',
-      'Android': steps('<strong>Settings</strong> → <strong>Digital Wellbeing</strong>', 'Screenshot the circle and the app list') + 'QUICK_QS',
+      'iPhone': steps('<strong>Settings</strong> → <strong>Screen Time</strong> → <strong>See All App &amp; Website Activity</strong> → <strong>Week</strong>', 'Screenshot the top (<strong>Daily Average</strong>)', 'Scroll down and screenshot again until the <strong>whole app list</strong> is in (2–4 is fine)', 'Skip the App Limits part — only usage counts') + 'QUICK_QS',
+      'Android': steps('<strong>Settings</strong> → <strong>Digital Wellbeing</strong>', 'Screenshot the circle', 'Scroll and screenshot until the <strong>whole app list</strong> is in (2–4 is fine)') + 'QUICK_QS',
     },
   },
 };
@@ -296,20 +296,80 @@ async function visionScreens(imgs, platform) {
 // The Screen Time quick check: one screenshot + three questions → a short
 // report and a personal plan. Only app names, minutes and answers are used.
 // ---------------------------------------------------------------------------
+function quickAnswers() {
+  return { when: $('select[name=qWhen]')?.value || '', feel: $('select[name=qFeel]')?.value || '', why: $('select[name=qWhy]')?.value || '' };
+}
+
+// Up to 6 screenshots (the app list rarely fits in one). With the person's OK
+// the AI reads them (1 AI use) — it knows App Limits aren't usage. If that
+// isn't possible, the on-device reader is the backup. Then they check the numbers.
 async function quickCheck(imgs) {
-  const answers = { when: $('select[name=qWhen]')?.value || '', feel: $('select[name=qFeel]')?.value || '', why: $('select[name=qWhy]')?.value || '' };
-  const set = showBusy('Reading your Screen Time…', 'Getting ready…');
+  const answers = quickAnswers();
+  const files = imgs.slice(0, 6);
+  const set = showBusy('Preparing your screenshots…', 'Getting them ready…');
   try {
-    const pages = await readImages(imgs.slice(0, 4), set);
-    const st = parseScreenTime(pages);
-    if (!st.apps.length && !st.dailyMinutes) {
-      return showError('We couldn\'t read that screenshot', 'Make sure it shows Screen Time\'s Daily Average or the list of apps with times next to them, then try again.');
-    }
-    renderQuick(st, answers);
+    const images = [];
+    for (const f of files) images.push(await prepImage(f, 1568));
+    set('Ready');
+    state.pending = { screentime: true, files, images, answers };
+    $('#sendLede').textContent = `${images.length === 1 ? 'This screenshot goes' : `These ${images.length} screenshots go`} to the AI to read your app times. Limits are ignored. Deleted right after.`;
+    $('#sendStats').innerHTML = `<div><b>${images.length}</b><span>screenshots sent</span></div><div><b>0</b><span>kept afterwards</span></div><div><b>1</b><span>AI use today</span></div>`;
+    $('#sendPreview').classList.add('hidden');
+    $('#sendThumbs').innerHTML = images.map((im) => `<img src="${im.preview}" alt="" />`).join('');
+    $('#sendThumbs').classList.remove('hidden');
+    goStep(3);
+    $('#sendModal').classList.remove('hidden');
+    $('#sendConfirm').focus();
   } catch (err) {
     console.error(err);
-    showError('We couldn\'t read that screenshot', 'Please try again with a clear screenshot of your Screen Time page.');
+    showError('We couldn\'t open those screenshots', 'Please try again with regular screenshots (PNG or JPG).');
   }
+}
+
+async function readScreenTimeShots(p) {
+  const set = showBusy('Reading your Screen Time…', 'Reading app times…');
+  const note = $('#stepRun .running .muted'); if (note) note.textContent = 'Screenshots are deleted right after.';
+  let st = null;
+  try {
+    const r = await postJSON('/api/screentime', { images: p.images.map(({ media_type, data }) => ({ media_type, data })) });
+    st = r.screenTime;
+  } catch (err) {
+    console.warn('AI reading failed, using the on-device reader', err);
+    if (err?.body?.error === 'daily_limit') state.limitHit = true;
+  }
+  if (!st || (!st.apps?.length && !st.dailyMinutes)) {
+    try {
+      set('Reading on this device…');
+      st = parseScreenTime(await readImages(p.files, set));
+    } catch (err) { console.error(err); st = null; }
+  }
+  if (!st || (!st.apps?.length && !st.dailyMinutes)) {
+    return showError('We couldn\'t read those screenshots', 'Make sure they show the Daily Average and the apps with times next to them.');
+  }
+  confirmNumbers(st, p.answers);
+}
+
+// "Check the numbers" — fix anything read wrong before the report.
+function confirmNumbers(st, answers) {
+  goStep(4);
+  const d = st.dailyMinutes || 0;
+  const row = (a = { name: '', minutes: '' }) => `<div class="st-row"><input class="st-name" value="${esc(a.name)}" placeholder="App" aria-label="App name" /><input class="st-min" type="number" min="0" max="1440" value="${esc(String(a.minutes))}" aria-label="Minutes a day" /><span class="muted">min/day</span><button class="btn btn-quiet btn-sm st-del" type="button" aria-label="Remove">✕</button></div>`;
+  $('#stepRun').innerHTML = `<div class="st-check">
+    <h3>Check the numbers</h3><p class="muted">Fix anything that looks wrong.</p>
+    ${state.limitHit ? '<p class="fine">Daily AI limit reached — read on your device instead.</p>' : ''}
+    <div class="st-daily"><span>Daily average</span><input id="stH" type="number" min="0" max="24" value="${Math.floor(d / 60)}" aria-label="Hours" /><span>h</span><input id="stM" type="number" min="0" max="59" value="${d % 60}" aria-label="Minutes" /><span>m</span></div>
+    <div id="stRows">${st.apps.map(row).join('')}</div>
+    <div class="row-between"><button id="stAdd" class="btn btn-quiet btn-sm" type="button">+ Add app</button><button id="stOk" class="btn btn-lantern" type="button">Looks right</button></div>
+  </div>`;
+  $('#stepRun').addEventListener('click', (e) => { if (e.target.closest('.st-del')) e.target.closest('.st-row').remove(); });
+  $('#stAdd').addEventListener('click', () => { $('#stRows').insertAdjacentHTML('beforeend', row()); $('#stRows .st-row:last-child .st-name').focus(); });
+  $('#stOk').addEventListener('click', () => {
+    const apps = $$('#stRows .st-row').map((r) => ({ name: r.querySelector('.st-name').value.trim().slice(0, 40), minutes: Math.round(Number(r.querySelector('.st-min').value)) }))
+      .filter((a) => a.name && a.minutes > 0).map((a) => ({ ...a, social: isSocial(a.name) })).sort((a, b) => b.minutes - a.minutes);
+    const daily = (Number($('#stH').value) || 0) * 60 + (Number($('#stM').value) || 0);
+    if (!apps.length && !daily) return toast('Add your daily average or at least one app');
+    renderQuick({ dailyMinutes: daily || null, pickups: st.pickups, pickupsPeriod: st.pickupsPeriod, apps }, answers);
+  });
 }
 
 const APP_KEYS = { YouTube: 'youtube', Instagram: 'instagram', TikTok: 'tiktok', Reddit: 'reddit' };
@@ -341,7 +401,7 @@ function renderQuick(st, answers) {
         ${st.apps.length ? `<div class="tile wide"><h4>Time per app, per day</h4>
           ${st.apps.map((a) => `<div class="bar-row"><span>${esc(a.name)}</span><span class="bar"><span style="width:${(a.minutes / max) * 100}%;background:${a.social ? 'var(--lantern)' : 'var(--kelp)'}"></span></span><span class="n">${fmtMin(a.minutes)}</span></div>`).join('')}
           <div class="legend"><span><i style="background:var(--lantern)"></i>Social and video apps</span><span><i style="background:var(--kelp)"></i>Other apps</span></div>
-          ${st.pickups ? `<p class="fine">You pick up your phone about ${st.pickups} times${st.pickups > 300 ? ' a week' : ' a day'}.</p>` : ''}</div>` : ''}
+          ${st.pickups ? `<p class="fine">You pick up your phone about ${st.pickups} times ${st.pickupsPeriod === 'week' ? 'a week' : 'a day'}.</p>` : ''}</div>` : ''}
         ${planTile()}
         ${quickAskPanel()}
       </div>
@@ -439,7 +499,7 @@ function scrubTitle(title) {
 }
 
 $('#sendCancel').addEventListener('click', () => { $('#sendModal').classList.add('hidden'); state.pending = null; });
-$('#sendConfirm').addEventListener('click', () => { $('#sendModal').classList.add('hidden'); if (state.pending) analyze(state.pending); });
+$('#sendConfirm').addEventListener('click', () => { $('#sendModal').classList.add('hidden'); const p = state.pending; if (!p) return; if (p.screentime) { state.pending = null; return readScreenTimeShots(p); } analyze(p); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#sendModal').classList.contains('hidden')) $('#sendCancel').click(); });
 
 // ---------------------------------------------------------------------------

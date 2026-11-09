@@ -11,7 +11,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { labelItems, writeReport, chatAboutDrift, writePlan, labelScreens, agentMode, getHealth } from './agent.js';
+import { labelItems, writeReport, chatAboutDrift, writePlan, labelScreens, readScreenTime, agentMode, getHealth } from './agent.js';
 import { addContribution, deleteContribution, allContributions, storageKind, usageCount, usageAdd } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,7 +24,7 @@ app.disable('x-powered-by');
 // Chat may carry a few attached photos (resized in the browser); everything else is small.
 const jsonSmall = express.json({ limit: '1mb' });
 const jsonChat = express.json({ limit: '12mb' });
-app.use((req, res, next) => (req.path === '/api/chat' || req.path === '/api/vision' ? jsonChat : jsonSmall)(req, res, next));
+app.use((req, res, next) => (['/api/chat', '/api/vision', '/api/screentime'].includes(req.path) ? jsonChat : jsonSmall)(req, res, next));
 
 // Basic security headers. The page loads its font from Google Fonts only.
 app.use((_req, res, next) => {
@@ -293,6 +293,21 @@ app.post('/api/vision', limitLabel, useAllowance, async (req, res) => {
     res.json({ videos });
   } catch (err) {
     console.error('[/api/vision]', err);
+    res.status(500).json({ error: 'could not read screenshots' });
+  }
+});
+
+// 3d. Screen Time screenshots → usage per app (ignores limits/settings). 1 AI use.
+app.post('/api/screentime', limitLabel, useAllowance, async (req, res) => {
+  try {
+    const IMG = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    const images = Array.isArray(req.body?.images) ? req.body.images.filter((im) => im && IMG.has(im.media_type) && typeof im.data === 'string' && im.data.length < 2_500_000).slice(0, 6) : [];
+    if (!images.length) return res.status(400).json({ error: 'no screenshots' });
+    const st = await readScreenTime({ images });
+    if (!st) return res.status(503).json({ error: 'could not read screenshots' });
+    res.json({ screenTime: st });
+  } catch (err) {
+    console.error('[/api/screentime]', err);
     res.status(500).json({ error: 'could not read screenshots' });
   }
 });
