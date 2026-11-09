@@ -318,9 +318,17 @@ const PLAN_GOALS = {
   focus: 'They want fewer distractions while studying or working.',
 };
 
-export async function writePlan({ drift, stats, goal, platform }) {
-  const goalText = PLAN_GOALS[goal] || PLAN_GOALS.happy;
+export async function writePlan(args) {
   if (!hasKey) return null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const plan = await writePlanOnce(args);
+    if (plan) return plan;
+  }
+  return null;
+}
+
+async function writePlanOnce({ drift, stats, goal, platform }) {
+  const goalText = PLAN_GOALS[goal] || PLAN_GOALS.happy;
   try {
     const msg = await client.messages.create({
       model: MODEL,
@@ -334,7 +342,7 @@ export async function writePlan({ drift, stats, goal, platform }) {
         '(Settings and activity → Content preferences → Reset suggested content; "Not interested"; Time management daily limit; ' +
         'Quiet mode), TikTok (Settings and privacy → Content preferences → Refresh your For You feed; Filter keywords; Screen time ' +
         'daily limit). Tone: warm, encouraging, never blaming, never "addicted", never comparing them to others; frame it as getting ' +
-        'the feed THEY want. Plain simple English. Give exactly 7 days, by calling the make_plan tool.',
+        'the feed THEY want. Plain simple English. You MUST answer by calling the make_plan tool exactly once with exactly 7 days — do not reply with plain text.',
       messages: [{ role: 'user', content: JSON.stringify({ goal: goalText, platform, drift: driftFacts(drift), stats }) }],
       // A forced tool call returns structured data, so the plan is always valid.
       tools: [{
@@ -353,9 +361,14 @@ export async function writePlan({ drift, stats, goal, platform }) {
           required: ['intro', 'days', 'checkIn'],
         },
       }],
-      tool_choice: { type: 'tool', name: 'make_plan' },
+      tool_choice: { type: 'auto' },
     });
-    const j = (msg.content || []).find((b) => b.type === 'tool_use')?.input || {};
+    let j = (msg.content || []).find((b) => b.type === 'tool_use')?.input;
+    if (!j) {
+      // If it answered in text instead, read the JSON from the text.
+      const raw = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+      try { j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); } catch { j = {}; }
+    }
     if (!Array.isArray(j.days) || j.days.length < 5) throw new Error('bad plan shape');
     noteOk();
     return {
