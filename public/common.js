@@ -109,6 +109,19 @@ export function fillSuggest(box, view) {
   box.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => view.send(b.textContent)));
 }
 
+// Phones: track the *visible* height (it shrinks when the keyboard opens on
+// iPhone), so the chat box and its input always fit on screen.
+if (onAskPage) document.body.classList.add('ask-body');
+const vv = window.visualViewport;
+function fitViewport() {
+  const h = vv ? vv.height : innerHeight;
+  document.documentElement.style.setProperty('--app-h', `${Math.round(h)}px`);
+  document.documentElement.style.setProperty('--app-top', `${Math.round(vv ? vv.offsetTop : 0)}px`);
+}
+fitViewport();
+(vv || window).addEventListener('resize', fitViewport);
+vv?.addEventListener('scroll', fitViewport);
+
 let widgetView = null;
 if (!onAskPage) {
   const open = () => {
@@ -119,9 +132,11 @@ if (!onAskPage) {
       widgetView.start(cur, HELLO());
       if (!cur) fillSuggest($('#cwBody [data-suggest]'), widgetView);
     }
-    setTimeout(() => $('#cwBody [data-input]').focus(), 50);
+    document.body.classList.add('cw-open');
+    // On phones, don't pop the keyboard straight away — let people read first.
+    if (!matchMedia('(pointer: coarse)').matches) setTimeout(() => $('#cwBody [data-input]').focus(), 50);
   };
-  const close = () => { $('#chatWidget').classList.add('hidden'); $('#chatFab').classList.remove('open'); $('#chatFab').setAttribute('aria-expanded', 'false'); $('#chatFab').focus(); };
+  const close = () => { document.body.classList.remove('cw-open'); $('#chatWidget').classList.add('hidden'); $('#chatFab').classList.remove('open'); $('#chatFab').setAttribute('aria-expanded', 'false'); $('#chatFab').focus(); };
   $('#chatFab').addEventListener('click', open);
   $('#chatClose').addEventListener('click', close);
   $('#chatNew').addEventListener('click', () => { setCurrent(null); widgetView?.start(null, HELLO()); fillSuggest($('#cwBody [data-suggest]'), widgetView); $('#cwBody [data-input]').focus(); });
