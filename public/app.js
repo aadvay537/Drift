@@ -483,6 +483,7 @@ async function analyze({ file, items, cleaned }) {
     next();
     let labeled;
     let usedBackup = false;
+    state.limitHit = false;
     if (file.hasTitles) {
       next();
       // Give a sleeping AI server up to ~40s to wake; otherwise use the
@@ -490,7 +491,8 @@ async function analyze({ file, items, cleaned }) {
       let labels = null;
       if (!server.up) { const li = $('.run-steps li.now'); if (li) li.textContent = 'Waking the AI (first visit only) — a backup engine takes over if it\'s slow'; }
       if (server.up || await waitForServer(25000)) {
-        try { labels = (await postJSON('/api/label', { items: cleaned })).labels; } catch (e) { if (e.status === 429) throw e; }
+        // Out of today's AI uses (or the AI is busy)? The on-device engine takes over.
+        try { labels = (await postJSON('/api/label', { items: cleaned })).labels; } catch (e) { if (e.body?.error === 'daily_limit') state.limitHit = true; }
       }
       if (!labels) { usedBackup = true; labels = cleaned.map(keywordLabel); }
       const byId = new Map((labels || []).map((l) => [l.id, l]));
@@ -617,7 +619,7 @@ function renderReport() {
   const { drift, report, weeks, file, extras } = state.analysis;
   const real = drift.type !== 'insufficient';
   const prev = loadRuns().filter((r) => r.platform === (file.platform || 'youtube')).at(-1);
-  const sourceTag = { ai: 'Written by AI, tone-checked', fallback: 'Plain pre-written report', mock: 'Demo report', local: 'Written on your device', browser: 'Written on your device by the backup engine (the AI server was asleep)', insufficient: '' }[report.source] || '';
+  const sourceTag = { ai: 'Written by AI, tone-checked', fallback: 'Plain pre-written report', mock: 'Demo report', local: 'Written on your device', browser: state.limitHit ? 'Made by the on-device engine, because today\'s AI uses are used up (they reset at midnight)' : 'Written on your device by the backup engine (the AI server was asleep)', insufficient: '' }[report.source] || '';
 
   const tiles = [];
   if (real) tiles.push(planTile());
@@ -645,6 +647,7 @@ function renderReport() {
             <span class="tag">${drift.coverageDays || 0} days${drift.startDate && drift.endDate ? `, ${esc(drift.startDate)} to ${esc(drift.endDate)}` : ''}</span>
             <span class="tag">${esc(platformName(file.platform))}${file.sample ? ' sample' : ''}</span>
             ${drift.estimatedDates ? '<span class="tag">dates estimated</span>' : ''}
+            ${state.limitHit ? '<span class="tag">today\'s AI uses are used up — made on your device</span>' : ''}
           </div>
           <h3 class="r-headline">${esc(report.headline)}</h3>
           ${report.driving ? `<p class="section-lede" style="font-size:17px">${esc(report.driving)}</p>` : ''}

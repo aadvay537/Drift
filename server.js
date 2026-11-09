@@ -12,7 +12,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { labelItems, writeReport, chatAboutDrift, writePlan, agentMode, getHealth } from './agent.js';
-import { addContribution, deleteContribution, allContributions, storageKind } from './store.js';
+import { addContribution, deleteContribution, allContributions, storageKind, usageCount, usageAdd } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -48,7 +48,8 @@ app.use('/api', (req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Drift-Device');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Drift-Remaining, X-Drift-Limit');
     res.setHeader('Access-Control-Max-Age', '86400');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -79,6 +80,48 @@ function rateLimit({ windowMs, max, name }) {
     next();
   };
 }
+// ---------------------------------------------------------------------------
+// Daily AI allowance: DRIFT_DAILY_LIMIT uses per person per day (default 4),
+// resetting at midnight India time. A "person" is their device (a random id
+// kept in their browser); a looser cap per network address stops someone
+// getting around it by clearing their browser. Asking Ask Drift = 1 use;
+// one full report = 1 use (its plan is included).
+// ---------------------------------------------------------------------------
+const DAILY_LIMIT = Number(process.env.DRIFT_DAILY_LIMIT) || 4;
+const DAILY_LIMIT_PER_IP = Number(process.env.DRIFT_DAILY_LIMIT_PER_IP) || 40;
+function deviceKey(req) {
+  const d = String(req.headers['x-drift-device'] || '').replace(/[^a-z0-9-]/gi, '').slice(0, 64);
+  return d.length >= 16 ? 'd:' + d : 'ip:' + (req.ip || 'unknown');
+}
+async function remainingFor(req) {
+  const [mine, net] = await Promise.all([usageCount(deviceKey(req)), usageCount('net:' + (req.ip || 'unknown'))]);
+  return Math.max(0, Math.min(DAILY_LIMIT - mine, DAILY_LIMIT_PER_IP - net));
+}
+function dailyAllowance() {
+  return async (req, res, next) => {
+    try {
+      const left = await remainingFor(req);
+      res.setHeader('X-Drift-Limit', DAILY_LIMIT);
+      if (left <= 0) {
+        res.setHeader('X-Drift-Remaining', 0);
+        return res.status(429).json({ error: 'daily_limit', limit: DAILY_LIMIT, message: `You've used today's ${DAILY_LIMIT} AI uses. They reset at midnight.` });
+      }
+      await Promise.all([usageAdd(deviceKey(req)), usageAdd('net:' + (req.ip || 'unknown'))]);
+      res.setHeader('X-Drift-Remaining', left - 1);
+      next();
+    } catch (err) {
+      console.error('[allowance]', err);
+      next(); // never block people because the counter itself failed
+    }
+  };
+}
+const useAllowance = dailyAllowance();
+
+app.get('/api/usage', async (req, res) => {
+  try { res.json({ limit: DAILY_LIMIT, remaining: await remainingFor(req) }); }
+  catch { res.json({ limit: DAILY_LIMIT, remaining: null }); }
+});
+
 const limitLabel = rateLimit({ windowMs: 10 * 60 * 1000, max: 8, name: 'analysis' });
 const limitReport = rateLimit({ windowMs: 10 * 60 * 1000, max: 12, name: 'report' });
 const limitChat = rateLimit({ windowMs: 60 * 1000, max: 20, name: 'chat' });
@@ -105,7 +148,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 // 1. Labeling. Guard: only {id, title} pairs are accepted — anything else is dropped.
-app.post('/api/label', limitLabel, async (req, res) => {
+app.post('/api/label', limitLabel, useAllowance, async (req, res) => {
   try {
     const raw = Array.isArray(req.body?.items) ? req.body.items : [];
     const items = raw
@@ -187,7 +230,7 @@ function shapeStats(st) {
   };
 }
 
-app.post('/api/chat', limitChat, async (req, res) => {
+app.post('/api/chat', limitChat, useAllowance, async (req, res) => {
   const b = req.body || {};
   const question = typeof b.question === 'string' ? b.question.slice(0, 8000) : '';
   const IMG_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);

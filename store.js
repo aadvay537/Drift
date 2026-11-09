@@ -90,3 +90,40 @@ export async function allContributions() {
   }
   return (await readFile()).map((x) => ({ day: x.day, ...x.data }));
 }
+
+// ---------------------------------------------------------------------------
+// Daily AI allowance. Counts are kept per device and per network address,
+// per calendar day in India time, and reset at midnight. Only counts are
+// stored — never what was asked.
+// ---------------------------------------------------------------------------
+const memUsage = new Map();
+let usageReady = null;
+async function usageTable() {
+  if (!DATABASE_URL) return null;
+  const db = await pg();
+  if (!usageReady) usageReady = db.query(`CREATE TABLE IF NOT EXISTS usage (k TEXT NOT NULL, day DATE NOT NULL, n INT NOT NULL DEFAULT 0, PRIMARY KEY (k, day))`);
+  await usageReady;
+  return db;
+}
+export function todayIST() {
+  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+}
+export async function usageCount(k) {
+  const day = todayIST();
+  const db = await usageTable().catch(() => null);
+  if (db) { const r = await db.query('SELECT n FROM usage WHERE k = $1 AND day = $2', [k, day]); return r.rows[0]?.n || 0; }
+  return memUsage.get(day + '|' + k) || 0;
+}
+export async function usageAdd(k) {
+  const day = todayIST();
+  const db = await usageTable().catch(() => null);
+  if (db) {
+    const r = await db.query('INSERT INTO usage (k, day, n) VALUES ($1, $2, 1) ON CONFLICT (k, day) DO UPDATE SET n = usage.n + 1 RETURNING n', [k, day]);
+    db.query('DELETE FROM usage WHERE day < $1', [day]).catch(() => {});
+    return r.rows[0].n;
+  }
+  for (const key of memUsage.keys()) if (!key.startsWith(day)) memUsage.delete(key);
+  const n = (memUsage.get(day + '|' + k) || 0) + 1;
+  memUsage.set(day + '|' + k, n);
+  return n;
+}
