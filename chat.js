@@ -14,6 +14,29 @@ const API = /github\.io$/.test(location.hostname) || location.protocol === 'file
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // ---------------------------------------------------------------------------
+// Daily AI allowance: a random, anonymous id for this browser (not linked to
+// anything about you), sent so the server can count today's AI uses.
+// ---------------------------------------------------------------------------
+export function deviceId() {
+  try {
+    let id = localStorage.getItem('drift.device');
+    if (!id) { id = (crypto.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))).replace(/[^a-z0-9-]/gi, ''); localStorage.setItem('drift.device', id); }
+    return id;
+  } catch { return ''; }
+}
+export const apiHeaders = () => ({ 'Content-Type': 'application/json', 'X-Drift-Device': deviceId() });
+const usageListeners = new Set();
+export function onUsage(fn) { usageListeners.add(fn); }
+export function noteUsage(res) {
+  const left = res?.headers?.get?.('X-Drift-Remaining');
+  const limit = res?.headers?.get?.('X-Drift-Limit');
+  if (left != null) usageListeners.forEach((fn) => fn(+left, +(limit || 4)));
+}
+export async function fetchUsage() {
+  try { const r = await fetch(API + '/api/usage', { headers: apiHeaders(), cache: 'no-store' }); const j = await r.json(); if (j.remaining != null) usageListeners.forEach((fn) => fn(j.remaining, j.limit)); return j; } catch { return null; }
+}
+
+// ---------------------------------------------------------------------------
 // Saved conversations (this device only)
 // ---------------------------------------------------------------------------
 const CONV_KEY = 'drift.chats.v1';
@@ -184,6 +207,14 @@ export class ChatView {
     this.log.addEventListener('click', (e) => this.onLogClick(e));
     this.setupAttach();
     this.setupMic();
+    // "3 of 4 AI questions left today"
+    this.usageEl = document.createElement('p');
+    this.usageEl.className = 'usage-note';
+    this.form.after(this.usageEl);
+    onUsage((left, limit) => {
+      this.usageEl.textContent = left > 0 ? `${left} of ${limit} free AI uses left today` : `No AI uses left today — they reset at midnight`;
+      this.usageEl.classList.toggle('out', left <= 0);
+    });
   }
 
   autosize() { this.input.style.height = 'auto'; this.input.style.height = Math.min(180, this.input.scrollHeight) + 'px'; }
@@ -232,14 +263,15 @@ export class ChatView {
     const rep = this.o.getContext?.() || (a ? { drift: a.drift, report: a.report, stats: chatStats(a) } : (this.o.useReport?.() ? latestReport() : null));
     try {
       const r = await this.fetchWithWake(API + '/api/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl.signal,
+        method: 'POST', headers: apiHeaders(), signal: ctl.signal,
         body: JSON.stringify({
           question: q, images: images.map(({ media_type, data }) => ({ media_type, data })),
           drift: rep?.drift || null, report: rep?.report || null, stats: rep?.stats || null,
           history, now: new Date().toISOString(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       }, el);
-      if (!r.ok) { const e = new Error('http'); e.status = r.status; throw e; }
+      noteUsage(r);
+      if (!r.ok) { const e = new Error('http'); e.status = r.status; try { e.body = await r.json(); } catch { /* not json */ } throw e; }
       const reader = r.body.getReader();
       const dec = new TextDecoder();
       let buf = '';
@@ -269,9 +301,9 @@ export class ChatView {
         this.finish(el, textOut, {}); this.remember(q, textOut, [], images.length);
       } else {
         el.classList.remove('typing');
-        el.innerHTML = `<p>${err.status === 429 ? 'That\'s a lot of questions in a minute. Please wait a moment and try again.' : err.status === 503 ? 'The assistant is still starting up. Please try again in a minute.' : err.status === 413 ? 'Those photos are too large. Try fewer or smaller ones.' : 'The assistant couldn\'t be reached just now. Check your connection and try again.'}</p>`;
+        el.innerHTML = `<p>${err.body?.error === 'daily_limit' ? `You've used today's ${err.body.limit || 4} free AI questions. They reset at midnight — see you tomorrow! (The suggested questions about your own report still work, because they're answered on your device.)` : err.status === 429 ? 'That\'s a lot of questions in a minute. Please wait a moment and try again.' : err.status === 503 ? 'The assistant is still starting up. Please try again in a minute.' : err.status === 413 ? 'Those photos are too large. Try fewer or smaller ones.' : 'The assistant couldn\'t be reached just now. Check your connection and try again.'}</p>`;
         el.dataset.retry = q;
-        el.insertAdjacentHTML('beforeend', `<div class="msg-actions"><button class="ma" data-act="retry" type="button">${ICON.retry}<span>Try again</span></button></div>`);
+        if (err.body?.error !== 'daily_limit') el.insertAdjacentHTML('beforeend', `<div class="msg-actions"><button class="ma" data-act="retry" type="button">${ICON.retry}<span>Try again</span></button></div>`);
       }
     } finally {
       this.abort = null;

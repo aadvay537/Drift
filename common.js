@@ -1,6 +1,6 @@
 // common.js — shared by every page: the AI server connection, the "Ask Drift"
 // assistant, safe text formatting, and small helpers.
-import { ChatView, chatBoxHTML, loadConvs, currentId, setCurrent, latestReport } from './chat.js';
+import { ChatView, chatBoxHTML, loadConvs, currentId, setCurrent, latestReport, apiHeaders, noteUsage, fetchUsage } from './chat.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -43,6 +43,7 @@ async function wakeServer() {
         else if (st.mode === 'live') setBadge('degraded', 'AI unavailable — using backup');
         else setBadge('', 'Demo engine');
         server.waiters.splice(0).forEach((fn) => fn(true));
+        fetchUsage();
         return;
       }
     } catch { /* still asleep — keep trying */ }
@@ -67,8 +68,9 @@ const nav = $('#nav');
 if (nav && document.querySelector('.hero')) addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 40), { passive: true });
 
 export async function postJSON(url, body) {
-  const r = await fetch(API + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!r.ok) { const e = new Error(await r.text()); e.status = r.status; throw e; }
+  const r = await fetch(API + url, { method: 'POST', headers: apiHeaders(), body: JSON.stringify(body) });
+  noteUsage(r);
+  if (!r.ok) { const txt = await r.text(); const e = new Error(txt); e.status = r.status; try { e.body = JSON.parse(txt); } catch { /* not json */ } throw e; }
   return r.json();
 }
 

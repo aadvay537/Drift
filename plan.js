@@ -3,7 +3,7 @@
 // that's saved on their device, and a reminder to check again in 2 weeks.
 
 import { $, $$, esc, API, server, waitForServer, toast } from './common.js';
-import { chatStats } from './chat.js';
+import { chatStats, apiHeaders } from './chat.js';
 import { topicName } from './insights.js';
 
 const GOALS = [
@@ -92,7 +92,7 @@ async function makePlan(a, goal, btn) {  // a = plan context
   let plan = null;
   if (server.up || await waitForServer(20000)) {
     try {
-      const r = await fetch(API + '/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ drift: a.drift, stats: a.stats, goal, platform: SETTINGS[platform] ? platform : 'youtube' }) });
+      const r = await fetch(API + '/api/plan', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ drift: a.drift, stats: a.stats, goal, platform: SETTINGS[platform] ? platform : 'youtube' }) });
       if (r.ok) plan = (await r.json()).plan;
     } catch { /* fall back below */ }
   }
