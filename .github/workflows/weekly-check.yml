@@ -22,8 +22,8 @@ jobs:
         run: curl -fsS --max-time 60 https://drift-aatp.onrender.com/api/health | jq .
       - name: Shared results (anonymous totals)
         run: curl -fsS --max-time 60 https://drift-aatp.onrender.com/api/results | jq .
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Install browser
